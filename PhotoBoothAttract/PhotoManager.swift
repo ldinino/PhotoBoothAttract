@@ -20,7 +20,13 @@ class PhotoManager: ObservableObject {
     private let queue = DispatchQueue(label: "com.photobooth.fsevents", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.photobooth.processing")
     
+    private static let bookmarkKey = "watchedFolderBookmark"
+    
     // MARK: - Configuration
+    
+    init() {
+        restoreSavedFolder()
+    }
     
     func selectFolder() {
         let panel = NSOpenPanel()
@@ -29,10 +35,51 @@ class PhotoManager: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         
-        if panel.runModal() == .OK {
-            self.watchedFolderURL = panel.url
-            startWatching()
-            scanExistingFiles()
+        if panel.runModal() == .OK, let url = panel.url {
+            setWatchedFolder(url)
+        }
+    }
+    
+    private func setWatchedFolder(_ url: URL) {
+        self.watchedFolderURL = url
+        saveBookmark(for: url)
+        startWatching()
+        scanExistingFiles()
+    }
+    
+    private func saveBookmark(for url: URL) {
+        do {
+            let bookmark = try url.bookmarkData(
+                options: [],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey)
+        } catch {
+            print("Failed to save folder bookmark: \(error)")
+        }
+    }
+    
+    private func restoreSavedFolder() {
+        guard let data = UserDefaults.standard.data(forKey: Self.bookmarkKey) else { return }
+        do {
+            var isStale = false
+            let url = try URL(
+                resolvingBookmarkData: data,
+                options: [],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            if isStale {
+                saveBookmark(for: url)
+            }
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                print("Previously watched folder no longer exists: \(url.path)")
+                return
+            }
+            setWatchedFolder(url)
+        } catch {
+            print("Failed to restore folder bookmark: \(error)")
         }
     }
     

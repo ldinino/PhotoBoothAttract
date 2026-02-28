@@ -10,30 +10,41 @@ import SwiftUI
 
 struct GuestView: View {
     @EnvironmentObject var photoManager: PhotoManager
-    
-    // Define a flexible 2-column grid
-    let columns = [
-        GridItem(.flexible(), spacing: 0),
-        GridItem(.flexible(), spacing: 0)
-    ]
-    
+
     var body: some View {
         GeometryReader { geometry in
+            let cellWidth = geometry.size.width / 2
+            let cellHeight = geometry.size.height / 2
+            let topFour = Array(photoManager.photos.prefix(4))
+
             ZStack {
                 Color.black.ignoresSafeArea()
-                
-                let topFour = Array(photoManager.photos.prefix(4))
-                
+
                 if topFour.isEmpty {
                     Text("Waiting for photos...")
                         .font(.system(size: 40, weight: .bold))
                         .foregroundColor(.gray)
                 } else {
-                    LazyVGrid(columns: columns, spacing: 0) {
-                        ForEach(Array(topFour.enumerated()), id: \.element.id) { index, photo in
-                            GuestPhotoCell(photo: photo, number: index + 1)
-                                .frame(height: geometry.size.height / 2) // Half the screen height per row
-                                .clipped()
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            if topFour.count > 0 {
+                                GuestPhotoCell(photo: topFour[0], number: 1)
+                                    .frame(width: cellWidth, height: cellHeight)
+                            }
+                            if topFour.count > 1 {
+                                GuestPhotoCell(photo: topFour[1], number: 2)
+                                    .frame(width: cellWidth, height: cellHeight)
+                            }
+                        }
+                        HStack(spacing: 0) {
+                            if topFour.count > 2 {
+                                GuestPhotoCell(photo: topFour[2], number: 3)
+                                    .frame(width: cellWidth, height: cellHeight)
+                            }
+                            if topFour.count > 3 {
+                                GuestPhotoCell(photo: topFour[3], number: 4)
+                                    .frame(width: cellWidth, height: cellHeight)
+                            }
                         }
                     }
                 }
@@ -45,29 +56,29 @@ struct GuestView: View {
 struct GuestPhotoCell: View {
     let photo: PhotoModel
     let number: Int
-    
+
     var body: some View {
-        ZStack {
-            Image(nsImage: photo.thumbnail)
-                .resizable()
-                .scaledToFill() // Fill the grid cell entirely
-            
-            // High-contrast number overlay
-            VStack {
-                HStack {
-                    Text("\(number)")
-                        .font(.system(size: 120, weight: .black, design: .rounded))
-                        .foregroundColor(.white)
-                        // Heavy shadow for contrast against bright photos
-                        .shadow(color: .black.opacity(0.8), radius: 8, x: 4, y: 4)
-                        .padding(40)
-                    
+        GeometryReader { cell in
+            ZStack {
+                Image(nsImage: photo.thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: cell.size.width, height: cell.size.height)
+                    .clipped()
+
+                VStack {
+                    HStack {
+                        Text("\(number)")
+                            .font(.system(size: 100, weight: .black, design: .rounded))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.9), radius: 6, x: 3, y: 3)
+                            .padding(24)
+                        Spacer()
+                    }
                     Spacer()
                 }
-                Spacer()
             }
         }
-        // Inner border to separate the grid slightly
-        .border(Color.black, width: 4)
+        .border(Color.black, width: 3)
     }
 }

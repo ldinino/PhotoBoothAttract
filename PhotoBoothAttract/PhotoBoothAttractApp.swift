@@ -13,10 +13,8 @@ struct PhotoBoothAttractApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // We leave this empty because AppDelegate handles window creation.
-        // Settings acts as a dummy scene to satisfy the compiler.
         Settings {
-            EmptyView()
+            SettingsView()
         }
     }
 }

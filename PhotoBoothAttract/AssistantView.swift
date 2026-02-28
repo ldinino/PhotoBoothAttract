@@ -60,10 +60,13 @@ struct AssistantView: View {
 struct AssistantPhotoRow: View {
     let photo: PhotoModel
     let index: Int
-    
+
+    @State private var showingPhoneSheet = false
+    @State private var phoneNumber = ""
+    @State private var shouldPrint = false
+
     var body: some View {
         HStack(spacing: 20) {
-            // Thumbnail with optional badge
             ZStack(alignment: .topLeading) {
                 Image(nsImage: photo.thumbnail)
                     .resizable()
@@ -71,8 +74,7 @@ struct AssistantPhotoRow: View {
                     .frame(width: 160, height: 120)
                     .cornerRadius(8)
                     .shadow(radius: 2)
-                
-                // Overlay badge for the active "Guest TV" top 4
+
                 if index < 4 {
                     Text("\(index + 1)")
                         .font(.headline)
@@ -85,8 +87,7 @@ struct AssistantPhotoRow: View {
                         .shadow(radius: 2)
                 }
             }
-            
-            // File info
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(photo.url.lastPathComponent)
                     .font(.headline)
@@ -94,14 +95,15 @@ struct AssistantPhotoRow: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
-            
+
             Spacer()
-            
+
             // MARK: - Action Buttons
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 Button(action: {
-                    // TODO: Phase 4 & 5 - Print and Send
-                    print("Initiating Print & Digital for: \(photo.url.lastPathComponent)")
+                    shouldPrint = true
+                    phoneNumber = ""
+                    showingPhoneSheet = true
                 }) {
                     VStack {
                         Text("🖨️ + ✉️")
@@ -113,10 +115,25 @@ struct AssistantPhotoRow: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.blue)
-                
+
                 Button(action: {
-                    // TODO: Phase 5 - Send Only
-                    print("Initiating Digital Only for: \(photo.url.lastPathComponent)")
+                    let _ = PrintManager.shared.printPhoto(at: photo.url)
+                }) {
+                    VStack {
+                        Text("🖨️")
+                            .font(.title)
+                        Text("Print Only")
+                            .font(.caption)
+                    }
+                    .frame(width: 100, height: 60)
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
+
+                Button(action: {
+                    shouldPrint = false
+                    phoneNumber = ""
+                    showingPhoneSheet = true
                 }) {
                     VStack {
                         Text("✉️")
@@ -134,5 +151,71 @@ struct AssistantPhotoRow: View {
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .sheet(isPresented: $showingPhoneSheet) {
+            PhoneNumberSheet(
+                photoURL: photo.url,
+                shouldPrint: shouldPrint,
+                phoneNumber: $phoneNumber,
+                isPresented: $showingPhoneSheet
+            )
+        }
+    }
+}
+
+struct PhoneNumberSheet: View {
+    let photoURL: URL
+    let shouldPrint: Bool
+    @Binding var phoneNumber: String
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text(shouldPrint ? "Print & Send via iMessage" : "Send via iMessage")
+                .font(.title2)
+                .bold()
+
+            Text(photoURL.lastPathComponent)
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            TextField("Phone number (e.g. +15551234567)", text: $phoneNumber)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 300)
+                .onSubmit { send() }
+
+            HStack(spacing: 16) {
+                Button("Cancel") {
+                    isPresented = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Send without number") {
+                    if shouldPrint {
+                        let _ = PrintManager.shared.printPhoto(at: photoURL)
+                    }
+                    MessageManager.shared.prepareDraftWithoutRecipient(imageURL: photoURL)
+                    isPresented = false
+                }
+
+                Button("Send") {
+                    send()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(30)
+        .frame(width: 420)
+    }
+
+    private func send() {
+        let trimmed = phoneNumber.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+
+        if shouldPrint {
+            let _ = PrintManager.shared.printPhoto(at: photoURL)
+        }
+        MessageManager.shared.prepareDraft(imageURL: photoURL, phoneNumber: trimmed)
+        isPresented = false
     }
 }
