@@ -39,9 +39,14 @@ class PrintManager: NSObject {
             return
         }
 
+        let isLandscape = image.size.width > image.size.height
+        let viewWidth = isLandscape ? paperHeight : paperWidth
+        let viewHeight = isLandscape ? paperWidth : paperHeight
+
         let printInfo = NSPrintInfo()
         printInfo.printer = printer
         printInfo.paperSize = NSSize(width: paperWidth, height: paperHeight)
+        printInfo.orientation = isLandscape ? .landscape : .portrait
         printInfo.topMargin = 0
         printInfo.bottomMargin = 0
         printInfo.leftMargin = 0
@@ -52,39 +57,25 @@ class PrintManager: NSObject {
         printInfo.verticalPagination = .fit
         printInfo.jobDisposition = .spool
 
-        let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: paperWidth, height: paperHeight))
+        let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: viewWidth, height: viewHeight))
         imageView.image = image
         imageView.imageScaling = .scaleProportionallyUpOrDown
 
         let printOperation = NSPrintOperation(view: imageView, printInfo: printInfo)
         printOperation.showsPrintPanel = false
-        printOperation.showsProgressPanel = true
-        printOperation.canSpawnSeparateThread = true
+        printOperation.showsProgressPanel = false
 
-        printOperation.runModal(for: NSWindow(), delegate: self, didRun: #selector(printOperationDidRun(_:success:contextInfo:)), contextInfo: Unmanaged.passRetained(CallbackBox(url: url, completion: completion)).toOpaque())
-    }
+        let success = printOperation.run()
 
-    @objc private func printOperationDidRun(_ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?) {
-        guard let contextInfo = contextInfo else { return }
-        let box = Unmanaged<CallbackBox>.fromOpaque(contextInfo).takeRetainedValue()
         if success {
-            ErrorLog.shared.log("PrintManager: Print job sent for \(box.url.lastPathComponent)")
+            ErrorLog.shared.log("PrintManager: Print job sent for \(url.lastPathComponent)")
         } else {
-            ErrorLog.shared.log("PrintManager: Print operation failed for \(box.url.lastPathComponent)")
+            ErrorLog.shared.log("PrintManager: Print operation failed for \(url.lastPathComponent)")
         }
-        box.completion?(success)
+        completion?(success)
     }
 
     func availablePrinters() -> [String] {
         NSPrinter.printerNames
-    }
-}
-
-private class CallbackBox {
-    let url: URL
-    let completion: ((Bool) -> Void)?
-    init(url: URL, completion: ((Bool) -> Void)?) {
-        self.url = url
-        self.completion = completion
     }
 }

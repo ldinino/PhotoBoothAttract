@@ -8,78 +8,128 @@
 
 import SwiftUI
 
+struct SheetRequest: Identifiable {
+    let id = UUID()
+    let photoURL: URL
+    let shouldPrint: Bool
+}
+
 struct AssistantView: View {
     @EnvironmentObject var photoManager: PhotoManager
-    
+
+    @State private var sheetRequest: SheetRequest?
+    @State private var phoneNumber = ""
+
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: - Toolbar / Header
-            HStack {
-                Text("PhotoBooth Assistant")
-                    .font(.title2)
-                    .bold()
-                
-                Spacer()
-                
-                if let url = photoManager.watchedFolderURL {
-                    Text("Watching: \(url.lastPathComponent)")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                }
-                
-                Button("Select Folder") {
-                    photoManager.selectFolder()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding()
-            .background(Color(NSColor.windowBackgroundColor))
-            
-            Divider()
-            
-            // MARK: - Photo Stream
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    if photoManager.photos.isEmpty {
-                        Text("No photos yet. Select a folder to begin.")
-                            .foregroundColor(.secondary)
-                            .padding(.top, 40)
-                    } else {
-                        ForEach(Array(photoManager.photos.enumerated()), id: \.element.id) { index, photo in
-                            AssistantPhotoRow(photo: photo, index: index)
+        GeometryReader { geo in
+            let rowWidth = max(geo.size.width - 32, 200)
+
+            VStack(spacing: 0) {
+                // MARK: - Toolbar / Header
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        Text("PhotoBooth Assistant")
+                            .font(.title2)
+                            .bold()
+                        Spacer()
+                        if let url = photoManager.watchedFolderURL {
+                            Text("Watching: \(url.lastPathComponent)")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
                         }
+                        Button("Select Folder") {
+                            photoManager.selectFolder()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    HStack {
+                        Text("PhotoBooth Assistant")
+                            .font(.headline)
+                            .bold()
+                            .lineLimit(1)
+                        Spacer()
+                        Button("Select Folder") {
+                            photoManager.selectFolder()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
                     }
                 }
                 .padding()
+                .background(Color(NSColor.windowBackgroundColor))
+
+                Divider()
+
+                // MARK: - Photo Stream
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        if photoManager.photos.isEmpty {
+                            Text("No photos yet. Select a folder to begin.")
+                                .foregroundColor(.secondary)
+                                .padding(.top, 40)
+                        } else {
+                            ForEach(Array(photoManager.photos.enumerated()), id: \.element.id) { index, photo in
+                                AssistantPhotoRow(
+                                    photo: photo,
+                                    index: index,
+                                    rowWidth: rowWidth,
+                                    onRequestSheet: { url, wantsPrint in
+                                        phoneNumber = ""
+                                        sheetRequest = SheetRequest(photoURL: url, shouldPrint: wantsPrint)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    .padding()
+                }
             }
         }
+        .frame(minWidth: 480, minHeight: 400)
         .background(Color(NSColor.underPageBackgroundColor))
+        .sheet(item: $sheetRequest) { request in
+            PhoneNumberSheet(
+                photoURL: request.photoURL,
+                shouldPrint: request.shouldPrint,
+                phoneNumber: $phoneNumber,
+                sheetRequest: $sheetRequest
+            )
+        }
     }
 }
 
 struct AssistantPhotoRow: View {
     let photo: PhotoModel
     let index: Int
+    let rowWidth: CGFloat
+    var onRequestSheet: (URL, Bool) -> Void
 
-    @State private var showingPhoneSheet = false
-    @State private var phoneNumber = ""
-    @State private var shouldPrint = false
+    private var isCompact: Bool { rowWidth < 460 }
+    private var isWide: Bool { rowWidth >= 560 }
+
+    private var thumbWidth: CGFloat {
+        if isWide { return 140 }
+        if !isCompact { return 110 }
+        return 80
+    }
 
     var body: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: isCompact ? 8 : 14) {
+            // MARK: Thumbnail
             ZStack(alignment: .topLeading) {
                 Image(nsImage: photo.thumbnail)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 160, height: 120)
+                    .frame(width: thumbWidth)
                     .cornerRadius(8)
                     .shadow(radius: 2)
 
                 if index < 4 {
                     Text("\(index + 1)")
-                        .font(.headline)
+                        .font(isCompact ? .subheadline : .headline)
                         .foregroundColor(.white)
-                        .padding(.horizontal, 10)
+                        .padding(.horizontal, isCompact ? 6 : 10)
                         .padding(.vertical, 4)
                         .background(Color.blue)
                         .clipShape(Capsule())
@@ -88,76 +138,85 @@ struct AssistantPhotoRow: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(photo.url.lastPathComponent)
-                    .font(.headline)
-                Text(photo.timestamp, style: .time)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+            // MARK: File info (wide only)
+            if isWide {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(photo.url.lastPathComponent)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(photo.timestamp, style: .time)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(minWidth: 40)
             }
 
-            Spacer()
+            Spacer(minLength: 4)
 
-            // MARK: - Action Buttons
-            HStack(spacing: 12) {
-                Button(action: {
-                    shouldPrint = true
-                    phoneNumber = ""
-                    showingPhoneSheet = true
-                }) {
-                    VStack {
-                        Text("🖨️ + ✉️")
-                            .font(.title)
-                        Text("Print & Digital")
-                            .font(.caption)
-                    }
-                    .frame(width: 100, height: 60)
-                }
-                .buttonStyle(.bordered)
-                .tint(.blue)
-
-                Button(action: {
-                    PrintManager.shared.printPhoto(at: photo.url)
-                }) {
-                    VStack {
-                        Text("🖨️")
-                            .font(.title)
-                        Text("Print Only")
-                            .font(.caption)
-                    }
-                    .frame(width: 100, height: 60)
-                }
-                .buttonStyle(.bordered)
-                .tint(.orange)
-
-                Button(action: {
-                    shouldPrint = false
-                    phoneNumber = ""
-                    showingPhoneSheet = true
-                }) {
-                    VStack {
-                        Text("✉️")
-                            .font(.title)
-                        Text("Digital Only")
-                            .font(.caption)
-                    }
-                    .frame(width: 100, height: 60)
-                }
-                .buttonStyle(.bordered)
-                .tint(.green)
-            }
+            // MARK: Action Buttons
+            actionButtons
         }
-        .padding()
+        .padding(.horizontal, isCompact ? 8 : 14)
+        .padding(.vertical, 10)
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-        .sheet(isPresented: $showingPhoneSheet) {
-            PhoneNumberSheet(
-                photoURL: photo.url,
-                shouldPrint: shouldPrint,
-                phoneNumber: $phoneNumber,
-                isPresented: $showingPhoneSheet
-            )
+    }
+
+    private var actionButtons: some View {
+        let showLabels = !isCompact
+        let btnHeight: CGFloat = showLabels ? 56 : 40
+
+        return HStack(spacing: isCompact ? 4 : 8) {
+            Button(action: { onRequestSheet(photo.url, true) }) {
+                VStack(spacing: 2) {
+                    Text("🖨️+✉️")
+                        .font(showLabels ? .title3 : .body)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    if showLabels {
+                        Text("Print & Digital")
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: btnHeight)
+            }
+            .buttonStyle(.bordered)
+            .tint(.blue)
+
+            Button(action: { PrintManager.shared.printPhoto(at: photo.url) }) {
+                VStack(spacing: 2) {
+                    Text("🖨️")
+                        .font(showLabels ? .title3 : .body)
+                    if showLabels {
+                        Text("Print Only")
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: btnHeight)
+            }
+            .buttonStyle(.bordered)
+            .tint(.orange)
+
+            Button(action: { onRequestSheet(photo.url, false) }) {
+                VStack(spacing: 2) {
+                    Text("✉️")
+                        .font(showLabels ? .title3 : .body)
+                    if showLabels {
+                        Text("Digital Only")
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: btnHeight)
+            }
+            .buttonStyle(.bordered)
+            .tint(.green)
         }
     }
 }
@@ -166,7 +225,7 @@ struct PhoneNumberSheet: View {
     let photoURL: URL
     let shouldPrint: Bool
     @Binding var phoneNumber: String
-    @Binding var isPresented: Bool
+    @Binding var sheetRequest: SheetRequest?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -185,7 +244,7 @@ struct PhoneNumberSheet: View {
 
             HStack(spacing: 16) {
                 Button("Cancel") {
-                    isPresented = false
+                    sheetRequest = nil
                 }
                 .keyboardShortcut(.cancelAction)
 
@@ -194,7 +253,7 @@ struct PhoneNumberSheet: View {
                         PrintManager.shared.printPhoto(at: photoURL)
                     }
                     MessageManager.shared.prepareDraftWithoutRecipient(imageURL: photoURL)
-                    isPresented = false
+                    sheetRequest = nil
                 }
 
                 Button("Send") {
@@ -216,6 +275,6 @@ struct PhoneNumberSheet: View {
             PrintManager.shared.printPhoto(at: photoURL)
         }
         MessageManager.shared.prepareDraft(imageURL: photoURL, phoneNumber: trimmed)
-        isPresented = false
+        sheetRequest = nil
     }
 }

@@ -6,8 +6,10 @@
 //
 
 import Foundation
+import Combine
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 final class ErrorLog: ObservableObject {
     static let shared = ErrorLog()
@@ -53,6 +55,7 @@ final class ErrorLog: ObservableObject {
     }
 }
 
+
 struct ErrorLogView: View {
     @ObservedObject var errorLog = ErrorLog.shared
 
@@ -89,7 +92,7 @@ struct ErrorLogView: View {
                         }
                         .id(entry.id)
                     }
-                    .onChange(of: errorLog.entries.count) { _ in
+                    .onChange(of: errorLog.entries.count) { _, _ in
                         if let last = errorLog.entries.last {
                             proxy.scrollTo(last.id, anchor: .bottom)
                         }

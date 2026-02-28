@@ -60,11 +60,12 @@ struct GuestPhotoCell: View {
     var body: some View {
         GeometryReader { cell in
             ZStack {
+                Color.black
+
                 Image(nsImage: photo.thumbnail)
                     .resizable()
-                    .scaledToFill()
+                    .scaledToFit()
                     .frame(width: cell.size.width, height: cell.size.height)
-                    .clipped()
 
                 VStack {
                     HStack {

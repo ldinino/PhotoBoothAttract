@@ -8,12 +8,21 @@
 import Cocoa
 import SwiftUI
 
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var assistantWindow: NSWindow!
     var guestWindow: NSWindow?
     var photoManager: PhotoManager!
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
+    }
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        for window in NSApp.windows {
+            window.close()
+        }
+
         setupWindows()
     }
 
@@ -32,6 +41,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         assistantWindow.title = "PhotoBooth Assistant"
         assistantWindow.contentView = NSHostingView(rootView: assistantView)
+        assistantWindow.minSize = NSSize(width: 480, height: 400)
+        assistantWindow.contentMinSize = NSSize(width: 480, height: 400)
         assistantWindow.center()
         assistantWindow.setFrameAutosaveName("AssistantWindow")
         assistantWindow.makeKeyAndOrderFront(nil)
