@@ -1,0 +1,26 @@
+PhotoBooth Attract
+
+Scenario
+A photographer often does event coverage. After the event, she does a Photo Booth attraction. The guest will take position and have their picture taken. An assistant is behind on an older 2012 MacBook Pro running macOS 15 Sequoia with OpenCore Legacy Patcher. Performance is acceptable, but the GPU is on the weaker side. The camera is connected to the Mac with Sony Image Desktop. When a picture is taken, the image files are instantly deposited to a folder, eliminating the need for SD cards. There is a small TV that faces the guest. On there, it will display a 2X2 grid of pictures labeled 1, 2, 3, and 4 (left to right, top to bottom. Number 1 is the newest image and number 4 is the oldest image. The guest will say “I like number 2!” An assistant will acknowledge this and select that image. The guest has two choices: either they purchase a physical print, done by a simple 4x6 photo printer, with a digital copy, or they get digital only. If the guest wants to purchase a print, the assistant will select the desired image. It will be sent to a designated printer with a predefined print profile (4x6 photo to a Canon Selphy CP1500). Once the print has been queued, the image will then be composed in a new iMessage draft. The guest provides a phone number, and the assistant punches it in and hits send. This relies on the fact that the MacBook is tied to the photographer’s iPhone and uses iCloud messages and SMS/RCS forwarding for non-iMessage recipients. If the guest only wants a digital copy, then the assistant can hit a different button and it skips the print logic entirely. It goes straight to the iMessage draft flow.
+
+Technical details and function
+The assistant and guest should have two realities. The guest will just see a TV with a grid. They yell a number and out comes the picture in a few moments. The assistant should see a stream of photos, ideally with a visual guide on which photo is which. It should look something like Camera Roll in Photos. When a guest yells the number, the assistant should intuitively know which picture they’re talking about. There should be some clear toolbar buttons up top that illustrates printing + sending or simply sending. We can rely on the emoji library. Photos should be reverse chronological, newest on top and older images infinitely scroll downward. If implementing a sort reverse is feasible, let’s include that. The photo grid should be displayed full screen on the secondary display and the assistant’s view should be full screen on the primary display. If possible, we should launch Messages, full screen that, and make a side-by-side view. That can afford us some additional troubleshooting for mis-sends or send fails.
+
+
+Implementation
+Phase 1: Project Skeleton & Multi-Display Setup
+* Goal: Establish the app architecture (SwiftUI vs. AppKit) and get windows on the correct screens.
+* Prompt directive: "Act as a senior macOS developer. We are building a non-sandboxed utility app in SwiftUI. Create a project skeleton that detects a secondary display on launch. It should open a full-screen window on the secondary display (the 'Guest TV View') and a standard window on the primary display (the 'Assistant View'). Do not add photo logic yet, just use colored rectangles to prove the window management works."
+Phase 2: The Hot Folder & Data Model
+* Goal: Safely detect new images and build the array.
+* Prompt directive: "Implement a robust file watcher class using FSEvents that monitors a specific local directory for new image files. It must account for race conditions and only add the file path to an @Published array once the file is completely written. Provide the data model that stores the file path, timestamp, and generates a low-memory downsampled thumbnail for UI use."
+Phase 3: The User Interfaces
+* Goal: Build the specific views based on the verified data model.
+* Prompt directive 1 (Guest): "Using the data model from the previous step, build the Guest TV View. It must display exactly the 4 most recent images in a 2x2 grid. Number them 1 (newest) to 4 (oldest) using large, high-contrast text overlays. When a 5th image arrives, the grid must update automatically."
+* Prompt directive 2 (Assistant): "Build the Assistant View. It should be a reverse-chronological scrolling list. The first 4 items in this list must have badge overlays (1, 2, 3, 4) to match the Guest TV View. Include a toolbar on each row with two buttons: '🖨️+✉️' (Print & Digital) and '✉️' (Digital Only)."
+Phase 4: Print Logic
+* Goal: Implement the silent print command.
+* Prompt directive: "Write a printing utility class for macOS. It must take a local image file URL and send it directly to a printer named exactly 'Canon Selphy CP1500'. It must bypass the system print dialog completely. Configure the NSPrintInfo for 4x6 photo paper with no margins."
+Phase 5: iMessage Automation
+* Goal: Bridge the app to Messages.
+* Prompt directive: "Write a utility function that takes a phone number string and a local file URL for an image. Execute an AppleScript from within the Swift code that opens the native macOS Messages app, creates a new chat with the provided phone number, and attaches the image file to the draft so it is ready for the user to hit send."

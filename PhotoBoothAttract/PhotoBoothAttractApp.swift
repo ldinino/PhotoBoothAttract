@@ -9,9 +9,14 @@ import SwiftUI
 
 @main
 struct PhotoBoothAttractApp: App {
+    // Inject the AppKit AppDelegate into the SwiftUI lifecycle
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        // We leave this empty because AppDelegate handles window creation.
+        // Settings acts as a dummy scene to satisfy the compiler.
+        Settings {
+            EmptyView()
         }
     }
 }
