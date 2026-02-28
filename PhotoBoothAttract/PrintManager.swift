@@ -7,7 +7,7 @@
 
 import AppKit
 
-class PrintManager {
+class PrintManager: NSObject {
 
     static let shared = PrintManager()
     static let printerNameKey = "configuredPrinterName"
@@ -26,15 +26,17 @@ class PrintManager {
         }
     }
 
-    func printPhoto(at url: URL) -> Bool {
+    func printPhoto(at url: URL, completion: ((Bool) -> Void)? = nil) {
         guard let image = NSImage(contentsOf: url) else {
-            print("PrintManager: Could not load image at \(url.path)")
-            return false
+            ErrorLog.shared.log("PrintManager: Could not load image at \(url.path)")
+            completion?(false)
+            return
         }
 
         guard let printer = NSPrinter(name: configuredPrinterName) else {
-            print("PrintManager: Printer '\(configuredPrinterName)' not found. Available printers: \(NSPrinter.printerNames)")
-            return false
+            ErrorLog.shared.log("PrintManager: Printer '\(configuredPrinterName)' not found. Available printers: \(NSPrinter.printerNames)")
+            completion?(false)
+            return
         }
 
         let printInfo = NSPrintInfo()
@@ -49,8 +51,6 @@ class PrintManager {
         printInfo.horizontalPagination = .fit
         printInfo.verticalPagination = .fit
         printInfo.jobDisposition = .spool
-        printInfo.dictionary().setObject(NSNumber(value: true),
-                                         forKey: NSPrintInfo.AttributeKey.headerAndFooter as NSCopying)
 
         let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: paperWidth, height: paperHeight))
         imageView.image = image
@@ -59,17 +59,32 @@ class PrintManager {
         let printOperation = NSPrintOperation(view: imageView, printInfo: printInfo)
         printOperation.showsPrintPanel = false
         printOperation.showsProgressPanel = true
+        printOperation.canSpawnSeparateThread = true
 
-        let success = printOperation.run()
+        printOperation.runModal(for: NSWindow(), delegate: self, didRun: #selector(printOperationDidRun(_:success:contextInfo:)), contextInfo: Unmanaged.passRetained(CallbackBox(url: url, completion: completion)).toOpaque())
+    }
+
+    @objc private func printOperationDidRun(_ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?) {
+        guard let contextInfo = contextInfo else { return }
+        let box = Unmanaged<CallbackBox>.fromOpaque(contextInfo).takeRetainedValue()
         if success {
-            print("PrintManager: Print job sent for \(url.lastPathComponent)")
+            ErrorLog.shared.log("PrintManager: Print job sent for \(box.url.lastPathComponent)")
         } else {
-            print("PrintManager: Print operation failed for \(url.lastPathComponent)")
+            ErrorLog.shared.log("PrintManager: Print operation failed for \(box.url.lastPathComponent)")
         }
-        return success
+        box.completion?(success)
     }
 
     func availablePrinters() -> [String] {
         NSPrinter.printerNames
+    }
+}
+
+private class CallbackBox {
+    let url: URL
+    let completion: ((Bool) -> Void)?
+    init(url: URL, completion: ((Bool) -> Void)?) {
+        self.url = url
+        self.completion = completion
     }
 }

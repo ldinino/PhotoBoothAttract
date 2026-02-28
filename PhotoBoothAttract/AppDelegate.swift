@@ -11,6 +11,7 @@ import SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate {
     var assistantWindow: NSWindow!
     var guestWindow: NSWindow?
+    var photoManager: PhotoManager!
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupWindows()
@@ -18,7 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func setupWindows() {
         let screens = NSScreen.screens
-        let photoManager = PhotoManager()
+        photoManager = PhotoManager()
         
         // 1. Setup Assistant View (Primary Screen)
         let assistantView = AssistantView().environmentObject(photoManager)
@@ -56,7 +57,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guestWindow.orderFront(nil)
             }
         } else {
-            print("No secondary display detected. Guest TV View will not be launched.")
+            ErrorLog.shared.log("No secondary display detected. Guest TV View will not be launched.")
         }
     }
     

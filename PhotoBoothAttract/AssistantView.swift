@@ -117,7 +117,7 @@ struct AssistantPhotoRow: View {
                 .tint(.blue)
 
                 Button(action: {
-                    let _ = PrintManager.shared.printPhoto(at: photo.url)
+                    PrintManager.shared.printPhoto(at: photo.url)
                 }) {
                     VStack {
                         Text("🖨️")
@@ -191,7 +191,7 @@ struct PhoneNumberSheet: View {
 
                 Button("Send without number") {
                     if shouldPrint {
-                        let _ = PrintManager.shared.printPhoto(at: photoURL)
+                        PrintManager.shared.printPhoto(at: photoURL)
                     }
                     MessageManager.shared.prepareDraftWithoutRecipient(imageURL: photoURL)
                     isPresented = false
@@ -213,7 +213,7 @@ struct PhoneNumberSheet: View {
         guard !trimmed.isEmpty else { return }
 
         if shouldPrint {
-            let _ = PrintManager.shared.printPhoto(at: photoURL)
+            PrintManager.shared.printPhoto(at: photoURL)
         }
         MessageManager.shared.prepareDraft(imageURL: photoURL, phoneNumber: trimmed)
         isPresented = false
