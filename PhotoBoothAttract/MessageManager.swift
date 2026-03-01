@@ -107,9 +107,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
 
     // MARK: - NSSharingServiceDelegate
 
-    func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) {
-        ErrorLog.shared.log("MessageManager: Message shared successfully")
-    }
+    func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) {}
 
     func sharingService(_ sharingService: NSSharingService, didFailToShareItems items: [Any], error: Error) {
         ErrorLog.shared.log("MessageManager: Failed to share - \(error.localizedDescription)")

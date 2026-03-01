@@ -37,7 +37,7 @@ The app is a **non-sandboxed** utility so it can access arbitrary folders and pr
    - **🖨️ Print only** — Send to the configured printer only.
    - **✉️ Digital only** — Open iMessage draft with the image (no print).
 5. **Phone number sheet** — For “Print & Digital” or “Digital only,” you can enter a phone number and send, or choose **Send without number** to open a draft and type the number in Messages.
-6. **Error Log** — **Help → Error Log** (or ⌘⌥L) to view, clear, or save the app’s log for troubleshooting.
+6. **Error Log** — **Help → Error Log** (or ⌘⌥L) to view, clear, or export the app’s log to the Desktop for troubleshooting.
 
 ## Settings
 
@@ -58,7 +58,7 @@ The app is a **non-sandboxed** utility so it can access arbitrary folders and pr
 | `PrintManager.swift` | Silent 4×6 print to configured printer |
 | `MessageManager.swift` | iMessage draft via NSSharingService |
 | `SettingsView.swift` | Printer configuration |
-| `ErrorLog.swift` | In-memory log and Error Log window |
+| `ErrorLog.swift` | Persistent circular log and Error Log window |
 
 For phased implementation details and prompt directives, see **[IMPLEMENTATION_SPEC.md](IMPLEMENTATION_SPEC.md)**.
 

@@ -34,7 +34,7 @@ class PrintManager: NSObject {
         }
 
         guard let printer = NSPrinter(name: configuredPrinterName) else {
-            ErrorLog.shared.log("PrintManager: Printer '\(configuredPrinterName)' not found. Available printers: \(NSPrinter.printerNames)")
+            ErrorLog.shared.log("PrintManager: Printer '\(configuredPrinterName)' not found (\(NSPrinter.printerNames.count) available)")
             completion?(false)
             return
         }
@@ -67,9 +67,7 @@ class PrintManager: NSObject {
 
         let success = printOperation.run()
 
-        if success {
-            ErrorLog.shared.log("PrintManager: Print job sent for \(url.lastPathComponent)")
-        } else {
+        if !success {
             ErrorLog.shared.log("PrintManager: Print operation failed for \(url.lastPathComponent)")
         }
         completion?(success)

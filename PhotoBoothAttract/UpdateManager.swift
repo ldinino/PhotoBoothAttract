@@ -108,7 +108,7 @@ final class UpdateManager {
             return
         }
 
-        ErrorLog.shared.log("Update check: current=v\(currentVersion) remote=v\(remoteVersion) bundlePath=\(Bundle.main.bundlePath)")
+        ErrorLog.shared.log("Update check: current=\(currentVersion) remote=\(remoteVersion)")
 
         if isNewerVersion(remoteVersion, than: currentVersion) {
             showUpdateAvailable(version: remoteVersion, notes: releaseNotes, downloadURL: downloadURL)
