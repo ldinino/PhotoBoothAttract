@@ -20,6 +20,21 @@ struct AssistantView: View {
     @State private var sheetRequest: SheetRequest?
     @State private var phoneNumber = ""
 
+    private var refreshButton: some View {
+        Button {
+            photoManager.refreshWatcher()
+        } label: {
+            if photoManager.isRefreshing {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: "arrow.clockwise")
+            }
+        }
+        .disabled(photoManager.isRefreshing || photoManager.watchedFolderURL == nil)
+        .help("Restart file watcher and re-scan folder")
+    }
+
     var body: some View {
         GeometryReader { geo in
             let rowWidth = max(geo.size.width - 32, 200)
@@ -37,6 +52,7 @@ struct AssistantView: View {
                                 .foregroundColor(.secondary)
                                 .font(.caption)
                         }
+                        refreshButton
                         Button("Select Folder") {
                             photoManager.selectFolder()
                         }
@@ -49,6 +65,7 @@ struct AssistantView: View {
                             .bold()
                             .lineLimit(1)
                         Spacer()
+                        refreshButton
                         Button("Select Folder") {
                             photoManager.selectFolder()
                         }
@@ -88,6 +105,16 @@ struct AssistantView: View {
         }
         .frame(minWidth: 480, minHeight: 400)
         .background(Color(NSColor.underPageBackgroundColor))
+        .overlay(alignment: .top) {
+            if photoManager.isRefreshing {
+                ProgressView("Refreshing…")
+                    .padding(8)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.top, 60)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: photoManager.isRefreshing)
         .sheet(item: $sheetRequest) { request in
             PhoneNumberSheet(
                 photoURL: request.photoURL,

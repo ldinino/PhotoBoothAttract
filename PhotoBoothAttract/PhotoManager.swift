@@ -14,6 +14,7 @@ import ImageIO
 class PhotoManager: ObservableObject {
     @Published var photos: [PhotoModel] = []
     @Published var watchedFolderURL: URL?
+    @Published var isRefreshing = false
     
     private var stream: FSEventStreamRef?
     private var processingFiles: Set<URL> = []
@@ -41,6 +42,42 @@ class PhotoManager: ObservableObject {
         }
     }
     
+    func refreshWatcher() {
+        guard let url = watchedFolderURL else { return }
+        isRefreshing = true
+        stopWatching()
+        processingQueue.sync { processingFiles.removeAll() }
+        photos.removeAll()
+
+        startWatching()
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.scanExistingFilesSync(at: url)
+            DispatchQueue.main.async {
+                self.isRefreshing = false
+            }
+        }
+    }
+
+    private func scanExistingFilesSync(at url: URL) {
+        do {
+            let files = try FileManager.default.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: [.creationDateKey],
+                options: .skipsHiddenFiles
+            )
+            let group = DispatchGroup()
+            for file in files {
+                group.enter()
+                processNewFile(at: file)
+                group.leave()
+            }
+            group.wait()
+        } catch {
+            ErrorLog.shared.log("Refresh scan failed: \(error)")
+        }
+    }
+
     private func setWatchedFolder(_ url: URL) {
         self.watchedFolderURL = url
         saveBookmark(for: url)
