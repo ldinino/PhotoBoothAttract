@@ -14,6 +14,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
 
     private static let maxPixelSize = 3000
     private static let jpegQuality: CGFloat = 0.85
+    private static let messageBody = "Thank you for choosing SD Photography. https://www.sd-photo.com/"
 
     func prepareDraft(imageURL: URL, phoneNumber: String) {
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
@@ -36,7 +37,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
 
         service.recipients = [sanitized]
         service.delegate = self
-        service.perform(withItems: [sendURL])
+        service.perform(withItems: [Self.messageBody, sendURL])
     }
 
     func prepareDraftWithoutRecipient(imageURL: URL) {
@@ -53,7 +54,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
         }
 
         service.delegate = self
-        service.perform(withItems: [sendURL])
+        service.perform(withItems: [Self.messageBody, sendURL])
     }
 
     // MARK: - Image Compression

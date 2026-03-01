@@ -30,6 +30,12 @@ struct HelpMenuCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .help) {
+            Button("Check for Updates...") {
+                UpdateManager.shared.checkForUpdates()
+            }
+
+            Divider()
+
             Button("Error Log") {
                 openWindow(id: "error-log")
             }
