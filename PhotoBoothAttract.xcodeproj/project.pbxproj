@@ -10,9 +10,22 @@
 		1C0E9FA22F536A7F00E4596B /* PhotoBoothAttract.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhotoBoothAttract.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1C0E9FB12F536A8000E4596B /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1C0E9FA12F536A7F00E4596B /* PhotoBoothAttract */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1C0E9FA42F536A7F00E4596B /* PhotoBoothAttract */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1C0E9FB12F536A8000E4596B /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
 			path = PhotoBoothAttract;
 			sourceTree = "<group>";
 		};
