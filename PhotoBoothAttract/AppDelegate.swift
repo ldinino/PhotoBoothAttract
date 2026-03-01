@@ -9,7 +9,7 @@ import Cocoa
 import SwiftUI
 
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var assistantWindow: NSWindow!
     var guestWindow: NSWindow?
     var photoManager: PhotoManager!
@@ -45,6 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         assistantWindow.contentMinSize = NSSize(width: 480, height: 400)
         assistantWindow.center()
         assistantWindow.setFrameAutosaveName("AssistantWindow")
+        assistantWindow.delegate = self
         assistantWindow.makeKeyAndOrderFront(nil)
         
         // 2. Setup Guest View (Secondary Screen)
@@ -72,8 +73,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    // Terminate the app when the main assistant window is closed
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        return true
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === assistantWindow else { return true }
+        
+        let alert = NSAlert()
+        alert.messageText = "Are you sure you want to quit?"
+        alert.informativeText = "Closing this window will also close the Guest TV and quit the application."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            NSApp.terminate(nil)
+        }
+        return false
     }
 }
