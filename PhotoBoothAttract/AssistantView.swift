@@ -16,6 +16,7 @@ struct SheetRequest: Identifiable {
 
 struct AssistantView: View {
     @EnvironmentObject var photoManager: PhotoManager
+    @EnvironmentObject var sonyCameraManager: SonyCameraManager
 
     @State private var sheetRequest: SheetRequest?
     @State private var phoneNumber = ""
@@ -39,6 +40,56 @@ struct AssistantView: View {
         .help("Restart file watcher and re-scan folder")
     }
 
+    private var cameraStatusChip: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(cameraStatusColor)
+                .frame(width: 9, height: 9)
+            Text(cameraStatusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(Capsule())
+        .help(cameraStatusHelp)
+    }
+
+    private var cameraStatusColor: Color {
+        switch sonyCameraManager.connectionStatus {
+        case .connected:
+            return .green
+        case .failed:
+            return .red
+        case .notConnected:
+            return .gray
+        }
+    }
+
+    private var cameraStatusText: String {
+        switch sonyCameraManager.connectionStatus {
+        case .connected(let model):
+            return "Camera: \(model)"
+        case .failed:
+            return "Camera: Connection failed"
+        case .notConnected:
+            return "Camera: Not connected"
+        }
+    }
+
+    private var cameraStatusHelp: String {
+        switch sonyCameraManager.connectionStatus {
+        case .connected(let model):
+            return "USB camera connected (\(model))"
+        case .failed(let reason):
+            return reason
+        case .notConnected:
+            return "No USB camera is currently connected"
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
             let rowWidth = max(geo.size.width - 32, 200)
@@ -56,6 +107,7 @@ struct AssistantView: View {
                                 .foregroundColor(.secondary)
                                 .font(.caption)
                         }
+                        cameraStatusChip
                         refreshButton
                         Button("Clear Photo Queue") {
                             showClearConfirmation = true
@@ -74,6 +126,7 @@ struct AssistantView: View {
                             .bold()
                             .lineLimit(1)
                         Spacer()
+                        cameraStatusChip
                         refreshButton
                         Button("Clear Photo Queue") {
                             showClearConfirmation = true

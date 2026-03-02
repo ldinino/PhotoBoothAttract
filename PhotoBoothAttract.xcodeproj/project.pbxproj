@@ -67,6 +67,7 @@
 			buildPhases = (
 				1C0E9F9E2F536A7F00E4596B /* Sources */,
 				1C0E9F9F2F536A7F00E4596B /* Frameworks */,
+				5D2A97012F90000100D00AAA /* Embed Sony SDK dylibs */,
 				1C0E9FA02F536A7F00E4596B /* Resources */,
 			);
 			buildRules = (
@@ -127,6 +128,37 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		5D2A97012F90000100D00AAA /* Embed Sony SDK dylibs */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Camera_SDK/SimpleCli/external/crsdk/libmonitor_protocol.dylib",
+				"$(SRCROOT)/Camera_SDK/SimpleCli/external/crsdk/libmonitor_protocol_pf.dylib",
+				"$(SRCROOT)/Camera_SDK/SimpleCli/external/crsdk/libCr_Core.dylib",
+				"$(SRCROOT)/Camera_SDK/SimpleCli/external/crsdk/CrAdapter/libusb-1.0.0.dylib",
+				"$(SRCROOT)/Camera_SDK/SimpleCli/external/crsdk/CrAdapter/libCr_PTP_USB.dylib",
+			);
+			name = "Embed Sony SDK dylibs";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libmonitor_protocol.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libmonitor_protocol_pf.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libCr_Core.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/CrAdapter/libusb-1.0.0.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/CrAdapter/libCr_PTP_USB.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\nSDK_ROOT=\"${SRCROOT}/Camera_SDK/SimpleCli/external/crsdk\"\nFRAMEWORKS_DIR=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nADAPTER_DIR=\"${FRAMEWORKS_DIR}/CrAdapter\"\n\nROOT_LIBS=(\n  \"libmonitor_protocol.dylib\"\n  \"libmonitor_protocol_pf.dylib\"\n  \"libCr_Core.dylib\"\n)\nADAPTER_LIBS=(\n  \"libusb-1.0.0.dylib\"\n  \"libCr_PTP_USB.dylib\"\n)\n\nif [ ! -d \"${SDK_ROOT}\" ]; then\n  echo \"error: Sony SDK folder missing at ${SDK_ROOT}. Add Camera_SDK/SimpleCli/external/crsdk to the repository before building.\"\n  exit 1\nfi\n\nmkdir -p \"${FRAMEWORKS_DIR}\" \"${ADAPTER_DIR}\"\n\nfor lib in \"${ROOT_LIBS[@]}\"; do\n  src=\"${SDK_ROOT}/${lib}\"\n  if [ ! -f \"${src}\" ]; then\n    echo \"error: Missing Sony SDK library ${src}\"\n    exit 1\n  fi\n  dst=\"${FRAMEWORKS_DIR}/${lib}\"\n  /bin/cp -f \"${src}\" \"${dst}\"\n  /usr/bin/codesign --force --sign - --timestamp=none \"${dst}\"\ndone\n\nfor lib in \"${ADAPTER_LIBS[@]}\"; do\n  src=\"${SDK_ROOT}/CrAdapter/${lib}\"\n  if [ ! -f \"${src}\" ]; then\n    echo \"error: Missing Sony SDK adapter library ${src}\"\n    exit 1\n  fi\n  dst=\"${ADAPTER_DIR}/${lib}\"\n  /bin/cp -f \"${src}\" \"${dst}\"\n  /usr/bin/codesign --force --sign - --timestamp=none \"${dst}\"\ndone\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		1C0E9F9E2F536A7F00E4596B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -179,7 +211,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -246,7 +278,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
