@@ -226,6 +226,11 @@ struct ErrorLogView: View {
                         }
                         .id(entry.id)
                     }
+                    .onAppear {
+                        if let last = errorLog.entries.last {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
                     .onChange(of: errorLog.entries.count) { _, _ in
                         if let last = errorLog.entries.last {
                             proxy.scrollTo(last.id, anchor: .bottom)

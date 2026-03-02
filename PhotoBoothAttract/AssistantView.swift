@@ -19,6 +19,10 @@ struct AssistantView: View {
 
     @State private var sheetRequest: SheetRequest?
     @State private var phoneNumber = ""
+    @State private var showClearConfirmation = false
+    @State private var showClearResultAlert = false
+    @State private var clearResultTitle = ""
+    @State private var clearResultMessage = ""
 
     private var refreshButton: some View {
         Button {
@@ -53,6 +57,11 @@ struct AssistantView: View {
                                 .font(.caption)
                         }
                         refreshButton
+                        Button("Clear Folder") {
+                            showClearConfirmation = true
+                        }
+                        .disabled(photoManager.watchedFolderURL == nil || photoManager.isClearing || photoManager.isRefreshing)
+                        .help("Delete all photos in the watched folder")
                         Button("Select Folder") {
                             photoManager.selectFolder()
                         }
@@ -66,6 +75,11 @@ struct AssistantView: View {
                             .lineLimit(1)
                         Spacer()
                         refreshButton
+                        Button("Clear Folder") {
+                            showClearConfirmation = true
+                        }
+                        .disabled(photoManager.watchedFolderURL == nil || photoManager.isClearing || photoManager.isRefreshing)
+                        .help("Delete all photos in the watched folder")
                         Button("Select Folder") {
                             photoManager.selectFolder()
                         }
@@ -112,9 +126,16 @@ struct AssistantView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                     .padding(.top, 60)
                     .transition(.move(edge: .top).combined(with: .opacity))
+            } else if photoManager.isClearing {
+                ProgressView("Clearing…")
+                    .padding(8)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.top, 60)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .animation(.easeInOut(duration: 0.25), value: photoManager.isRefreshing)
+        .animation(.easeInOut(duration: 0.25), value: photoManager.isClearing)
         .sheet(item: $sheetRequest) { request in
             PhoneNumberSheet(
                 photoURL: request.photoURL,
@@ -122,6 +143,50 @@ struct AssistantView: View {
                 phoneNumber: $phoneNumber,
                 sheetRequest: $sheetRequest
             )
+        }
+        .confirmationDialog("Clear folder?", isPresented: $showClearConfirmation) {
+            Button("Delete All", role: .destructive) {
+                performClearFolder()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            let count = photoManager.photos.count
+            let folderName = photoManager.watchedFolderURL?.lastPathComponent ?? "folder"
+            Text("Permanently delete all \(count) photo\(count == 1 ? "" : "s") in \"\(folderName)\"? This cannot be undone.")
+        }
+        .alert(clearResultTitle, isPresented: $showClearResultAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(clearResultMessage)
+        }
+    }
+
+    private func performClearFolder() {
+        photoManager.clearWatchedFolder { result in
+            switch result {
+            case .success(let count):
+                clearResultTitle = "Folder cleared"
+                clearResultMessage = "Deleted \(count) photo\(count == 1 ? "" : "s")."
+                showClearResultAlert = true
+            case .failure(let error):
+                clearResultTitle = "Clear folder failed"
+                clearResultMessage = message(for: error)
+                ErrorLog.shared.log("Clear folder: \(clearResultMessage)")
+                showClearResultAlert = true
+            }
+        }
+    }
+
+    private func message(for error: ClearFolderError) -> String {
+        switch error {
+        case .noFolder:
+            return "No folder is selected."
+        case .folderNotSafe:
+            return "This folder cannot be cleared for safety (root or home directory)."
+        case .enumerationFailed(let underlying):
+            return "Could not list folder contents: \(underlying.localizedDescription)"
+        case .deleteFailed(let url, let underlying):
+            return "Failed to delete \(url.lastPathComponent): \(underlying.localizedDescription)"
         }
     }
 }

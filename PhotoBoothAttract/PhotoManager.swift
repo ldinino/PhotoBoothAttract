@@ -11,10 +11,18 @@ import Combine
 import AppKit
 import ImageIO
 
+enum ClearFolderError: Error {
+    case noFolder
+    case folderNotSafe
+    case enumerationFailed(Error)
+    case deleteFailed(URL, Error)
+}
+
 class PhotoManager: ObservableObject {
     @Published var photos: [PhotoModel] = []
     @Published var watchedFolderURL: URL?
     @Published var isRefreshing = false
+    @Published var isClearing = false
     
     private var stream: FSEventStreamRef?
     private var processingFiles: Set<URL> = []
@@ -120,7 +128,87 @@ class PhotoManager: ObservableObject {
             ErrorLog.shared.log("Failed to restore folder bookmark: \(error)")
         }
     }
-    
+
+    // MARK: - Clear Folder
+
+    /// Returns the number of deletable image files in the watched folder, or nil if folder is missing/unsafe or enumeration failed.
+    func deletablePhotoCountInWatchedFolder() -> Int? {
+        switch listDeletablePhotoURLs() {
+        case .success(let urls): return urls.count
+        case .failure: return nil
+        }
+    }
+
+    func clearWatchedFolder(completion: @escaping (Result<Int, ClearFolderError>) -> Void) {
+        guard watchedFolderURL != nil else {
+            completion(.failure(.noFolder))
+            return
+        }
+        let result = listDeletablePhotoURLs()
+        switch result {
+        case .failure(let error):
+            completion(.failure(error))
+            return
+        case .success(let urlsToDelete):
+            let folderPath = watchedFolderURL!.standardized.path
+            if urlsToDelete.isEmpty {
+                ErrorLog.shared.log("Clear folder triggered: folder is empty (\(folderPath))")
+                DispatchQueue.main.async {
+                    self.photos.removeAll()
+                    completion(.success(0))
+                }
+                return
+            }
+            ErrorLog.shared.log("Clear folder triggered: deleting \(urlsToDelete.count) photo(s) in \(folderPath)")
+            isClearing = true
+            DispatchQueue.global(qos: .userInitiated).async {
+                var deletedCount = 0
+                for url in urlsToDelete {
+                    do {
+                        try FileManager.default.removeItem(at: url)
+                        deletedCount += 1
+                    } catch {
+                        ErrorLog.shared.log("Clear folder: failed to delete \(url.lastPathComponent): \(error)")
+                    }
+                }
+                DispatchQueue.main.async {
+                    self.isClearing = false
+                    self.photos.removeAll()
+                    completion(.success(deletedCount))
+                }
+            }
+        }
+    }
+
+    /// Lists direct children of the watched folder that are regular files with allowed image extensions. Fails if no folder or path is unsafe (root or home).
+    private func listDeletablePhotoURLs() -> Result<[URL], ClearFolderError> {
+        guard let watched = watchedFolderURL else { return .failure(.noFolder) }
+        let folderURL = watched.standardized
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardized.path
+        if folderURL.path == "/" || folderURL.path == home {
+            return .failure(.folderNotSafe)
+        }
+        do {
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: folderURL,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: .skipsHiddenFiles
+            )
+            var toDelete: [URL] = []
+            for url in contents {
+                let ext = url.pathExtension.lowercased()
+                guard Self.allowedExtensions.contains(ext) else { continue }
+                let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+                guard values?.isRegularFile == true else { continue }
+                toDelete.append(url)
+            }
+            return .success(toDelete)
+        } catch {
+            ErrorLog.shared.log("Clear folder: enumeration failed: \(error)")
+            return .failure(.enumerationFailed(error))
+        }
+    }
+
     // MARK: - File Ingestion & Race Condition Handling
     
     func processNewFile(at url: URL, retries: Int = 0) {

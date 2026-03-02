@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 @main
 struct PhotoBoothAttractApp: App {
@@ -15,7 +16,10 @@ struct PhotoBoothAttractApp: App {
         Settings {
             SettingsView()
         }
-        .commands { HelpMenuCommands() }
+        .commands {
+            HelpMenuCommands()
+            WindowCommands()
+        }
 
         Window("Error Log", id: "error-log") {
             ErrorLogView()
@@ -40,6 +44,35 @@ struct HelpMenuCommands: Commands {
                 openWindow(id: "error-log")
             }
             .keyboardShortcut("L", modifiers: [.command, .option])
+
+            Divider()
+
+            Button("Refresh Displays") {
+                NotificationCenter.default.post(name: .refreshDisplaysRequested, object: nil)
+            }
+        }
+    }
+}
+
+/// Replaces the default Window arrangement group to remove "Show Tab Bar" and "Show All Tabs".
+struct WindowCommands: Commands {
+    var body: some Commands {
+        CommandGroup(replacing: .windowArrangement) {
+            Button("Minimize") {
+                NSApp.keyWindow?.miniaturize(nil)
+            }
+            .keyboardShortcut("m", modifiers: .command)
+
+            Button("Zoom") {
+                NSApp.keyWindow?.zoom(nil)
+            }
+
+            Divider()
+
+            Button("Enter Full Screen") {
+                NSApp.keyWindow?.toggleFullScreen(nil)
+            }
+            .keyboardShortcut("f", modifiers: [.command, .control])
         }
     }
 }
