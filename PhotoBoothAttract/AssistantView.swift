@@ -57,7 +57,7 @@ struct AssistantView: View {
                                 .font(.caption)
                         }
                         refreshButton
-                        Button("Clear Folder") {
+                        Button("Clear Photo Queue") {
                             showClearConfirmation = true
                         }
                         .disabled(photoManager.watchedFolderURL == nil || photoManager.isClearing || photoManager.isRefreshing)
@@ -75,7 +75,7 @@ struct AssistantView: View {
                             .lineLimit(1)
                         Spacer()
                         refreshButton
-                        Button("Clear Folder") {
+                        Button("Clear Photo Queue") {
                             showClearConfirmation = true
                         }
                         .disabled(photoManager.watchedFolderURL == nil || photoManager.isClearing || photoManager.isRefreshing)

@@ -5,8 +5,42 @@
 //  Created by Luciano DiNino on 2/28/26.
 //
 
-
 import SwiftUI
+
+// MARK: - Guest grid configuration
+
+enum GuestGridConfig {
+    static let watermarkKey = "guestGridWatermarkText"
+    static let defaultWatermark = "SAMPLE"
+}
+
+// MARK: - Diagonal watermark overlay
+
+struct DiagonalWatermarkOverlay: View {
+    let size: CGSize
+    let text: String
+
+    private let opacity: Double = 0.30
+
+    var body: some View {
+        let diagonal = hypot(size.width, size.height)
+        let characterCount = max(1, text.count)
+        // Scale so the text spans ~70% of the diagonal; bold is ~0.55 pt per character
+        let fontSize = (diagonal * 0.7) / (CGFloat(characterCount) * 0.55)
+        let clampedSize = min(max(fontSize, 14), min(size.width, size.height) * 0.2)
+
+        ZStack {
+            Text(text)
+                .font(.system(size: clampedSize, weight: .bold))
+                .foregroundColor(.white.opacity(opacity))
+                .rotationEffect(.degrees(-30))
+        }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Guest view
 
 struct GuestView: View {
     @EnvironmentObject var photoManager: PhotoManager
@@ -56,6 +90,12 @@ struct GuestView: View {
 struct GuestPhotoCell: View {
     let photo: PhotoModel
     let number: Int
+    @AppStorage(GuestGridConfig.watermarkKey) private var storedWatermark: String = ""
+
+    private var resolvedWatermark: String {
+        let trimmed = storedWatermark.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? GuestGridConfig.defaultWatermark : trimmed
+    }
 
     var body: some View {
         GeometryReader { cell in
@@ -66,6 +106,9 @@ struct GuestPhotoCell: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: cell.size.width, height: cell.size.height)
+                    .overlay {
+                        DiagonalWatermarkOverlay(size: cell.size, text: resolvedWatermark)
+                    }
 
                 VStack {
                     HStack {
