@@ -34,7 +34,7 @@ New arrivals must not retarget an action already in progress.
 
 **Status: open.** Automated and build checks pass; the live-app and hardware checks below are not done.
 
-**Fix** (branch `fix/core-001-folder-lifecycle`, PR: see handoff): `FolderLifecycle` in
+**Fix** (branch `fix/core-001-folder-lifecycle`, PR #1): `FolderLifecycle` in
 PhotoManager.swift holds a generation counter and per-URL claims tagged with their generation.
 Selection and refresh call `beginLifecycle()`, which stops the watcher, clears photos, resets
 busy flags and bumps the generation. Scans, retries, FSEvents callbacks (generation stored per
