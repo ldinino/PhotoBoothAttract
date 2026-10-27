@@ -32,6 +32,35 @@ retries and publications from an earlier folder lifecycle cannot repopulate the 
 Cover switch, refresh and clear interactions, including completion after a switch.
 New arrivals must not retarget an action already in progress.
 
+**Status: open.** Automated and build checks pass; the live-app and hardware checks below are not done.
+
+**Fix** (branch `fix/core-001-folder-lifecycle`, PR #1): `FolderLifecycle` in
+PhotoManager.swift holds a generation counter and per-URL claims tagged with their generation.
+Selection and refresh call `beginLifecycle()`, which stops the watcher, clears photos, resets
+busy flags and bumps the generation. Scans, retries, FSEvents callbacks (generation stored per
+stream), publications, claim release and refresh/clear completions all check their generation,
+so A-B-A and same-folder refresh are covered. A clear also starts a new generation (and restarts
+the watcher under it), so reads and retries begun before the clear cannot republish deleted photos.
+
+**Baseline reproduction** (real `PhotoManager` at 48128dd, scratch harness): A->B kept A's photo;
+a retry from A published into B; the old cleanup released the claim a refresh had just taken;
+clear completion after a switch emptied B (400-file fixture to widen the race).
+
+**Automated:** `bash scripts/check-folder-lifecycle.sh` compiles the real `PhotoManager` and
+`PhotoModel` with a logging stub and synthetic images (never the app log or a live folder);
+all checks pass (31). Mutants: `release` (URL-only release) fails 2 checks; `current` (staleness
+never detected) fails 11; `clear` (clear keeps the old generation) fails 4. The first review pass
+missed the clear race; the added checks replay a pre-clear read and a pre-clear pending retry
+after the clear completes, using files outside the cleared folder so they survive the delete.
+
+**Build:** the Debug `xcodebuild` command from the brief succeeded. A standalone launch with the
+saved folder suppressed stayed up for 6 seconds without stderr output.
+
+**Not verified:** folder selection, refresh, confirmed clear and live hot-folder arrivals in the
+running app; empty state and busy controls on screen; single- and dual-display behavior; older
+Intel Mac. Selecting a folder in the app overwrites the saved bookmark, so these need a manual run.
+**Remaining gap:** after a clear, arrivals that land while deletion is in progress are removed from the list at completion even if their files remain (CORE-005 territory).
+
 ## CORE-002: Preview and Action Identity
 
 **Owner:** [PhotoManager.swift](../PhotoBoothAttract/PhotoManager.swift#L244).

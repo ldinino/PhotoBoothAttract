@@ -18,6 +18,45 @@ enum ClearFolderError: Error {
     case deleteFailed(URL, Error)
 }
 
+/// Each folder selection or refresh starts a new generation; work tagged with an older one is stale.
+nonisolated struct FolderLifecycle {
+    private(set) var generation = 0
+    private var claims: [URL: Int] = [:]
+
+    mutating func begin() -> Int {
+        generation += 1
+        claims.removeAll()
+        return generation
+    }
+
+    func isCurrent(_ generation: Int) -> Bool {
+        generation == self.generation
+    }
+
+    func owns(_ url: URL, generation: Int) -> Bool {
+        isCurrent(generation) && claims[url] == generation
+    }
+
+    mutating func claim(_ url: URL, generation: Int) -> Bool {
+        guard isCurrent(generation), claims[url] == nil else { return false }
+        claims[url] = generation
+        return true
+    }
+
+    mutating func release(_ url: URL, generation: Int) {
+        if claims[url] == generation { claims[url] = nil }
+    }
+}
+
+private final class StreamInfo {
+    weak var manager: PhotoManager?
+    let generation: Int
+    init(manager: PhotoManager, generation: Int) {
+        self.manager = manager
+        self.generation = generation
+    }
+}
+
 class PhotoManager: ObservableObject {
     @Published var photos: [PhotoModel] = []
     @Published var watchedFolderURL: URL?
@@ -25,7 +64,7 @@ class PhotoManager: ObservableObject {
     @Published var isClearing = false
     
     private var stream: FSEventStreamRef?
-    private var processingFiles: Set<URL> = []
+    private var lifecycle = FolderLifecycle()
     private let queue = DispatchQueue(label: "com.photobooth.fsevents", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.photobooth.processing")
     
@@ -50,24 +89,39 @@ class PhotoManager: ObservableObject {
         }
     }
     
+    /// Starts a new lifecycle: stops the watcher and drops all state from the previous one.
+    private func beginLifecycle() -> Int {
+        stopWatching()
+        photos.removeAll()
+        isRefreshing = false
+        isClearing = false
+        return processingQueue.sync { lifecycle.begin() }
+    }
+
+    var generation: Int {
+        processingQueue.sync { lifecycle.generation }
+    }
+
+    private func isCurrent(_ generation: Int) -> Bool {
+        processingQueue.sync { lifecycle.isCurrent(generation) }
+    }
+
     func refreshWatcher() {
         guard let url = watchedFolderURL else { return }
+        let generation = beginLifecycle()
         isRefreshing = true
-        stopWatching()
-        processingQueue.sync { processingFiles.removeAll() }
-        photos.removeAll()
 
-        startWatching()
+        startWatching(url, generation: generation)
 
         DispatchQueue.global(qos: .userInitiated).async {
-            self.scanExistingFilesSync(at: url)
+            self.scanExistingFilesSync(at: url, generation: generation)
             DispatchQueue.main.async {
-                self.isRefreshing = false
+                if self.isCurrent(generation) { self.isRefreshing = false }
             }
         }
     }
 
-    private func scanExistingFilesSync(at url: URL) {
+    private func scanExistingFilesSync(at url: URL, generation: Int) {
         do {
             let files = try FileManager.default.contentsOfDirectory(
                 at: url,
@@ -77,7 +131,7 @@ class PhotoManager: ObservableObject {
             let group = DispatchGroup()
             for file in files {
                 group.enter()
-                processNewFile(at: file)
+                processNewFile(at: file, generation: generation)
                 group.leave()
             }
             group.wait()
@@ -86,11 +140,12 @@ class PhotoManager: ObservableObject {
         }
     }
 
-    private func setWatchedFolder(_ url: URL) {
+    func setWatchedFolder(_ url: URL) {
+        let generation = beginLifecycle()
         self.watchedFolderURL = url
         saveBookmark(for: url)
-        startWatching()
-        scanExistingFiles()
+        startWatching(url, generation: generation)
+        scanExistingFiles(at: url, generation: generation)
     }
     
     private func saveBookmark(for url: URL) {
@@ -151,10 +206,13 @@ class PhotoManager: ObservableObject {
             return
         case .success(let urlsToDelete):
             let folderPath = watchedFolderURL!.standardized.path
+            stopWatching()
+            let generation = processingQueue.sync { lifecycle.begin() }
+            startWatching(watchedFolderURL!, generation: generation)
             if urlsToDelete.isEmpty {
                 ErrorLog.shared.log("Clear folder triggered: folder is empty (\(folderPath))")
                 DispatchQueue.main.async {
-                    self.photos.removeAll()
+                    if self.isCurrent(generation) { self.photos.removeAll() }
                     completion(.success(0))
                 }
                 return
@@ -172,8 +230,10 @@ class PhotoManager: ObservableObject {
                     }
                 }
                 DispatchQueue.main.async {
-                    self.isClearing = false
-                    self.photos.removeAll()
+                    if self.isCurrent(generation) {
+                        self.isClearing = false
+                        self.photos.removeAll()
+                    }
                     completion(.success(deletedCount))
                 }
             }
@@ -211,20 +271,17 @@ class PhotoManager: ObservableObject {
 
     // MARK: - File Ingestion & Race Condition Handling
     
-    func processNewFile(at url: URL, retries: Int = 0) {
-        let isFirstAttempt = retries == 0
-        if isFirstAttempt {
-            let alreadyProcessing: Bool = processingQueue.sync {
-                if processingFiles.contains(url) { return true }
-                processingFiles.insert(url)
-                return false
-            }
-            guard !alreadyProcessing else { return }
+    func processNewFile(at url: URL, generation: Int, retries: Int = 0) {
+        let proceed: Bool = processingQueue.sync {
+            retries == 0
+                ? lifecycle.claim(url, generation: generation)
+                : lifecycle.owns(url, generation: generation)
         }
+        guard proceed else { return }
         
         let ext = url.pathExtension.lowercased()
         guard Self.allowedExtensions.contains(ext) else {
-            removeFromProcessing(url)
+            removeFromProcessing(url, generation: generation)
             return
         }
         
@@ -232,10 +289,10 @@ class PhotoManager: ObservableObject {
               CGImageSourceGetStatus(source) == .statusComplete else {
             if retries < 5 {
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-                    self.processNewFile(at: url, retries: retries + 1)
+                    self.processNewFile(at: url, generation: generation, retries: retries + 1)
                 }
             } else {
-                removeFromProcessing(url)
+                removeFromProcessing(url, generation: generation)
                 ErrorLog.shared.log("Failed to read file after multiple attempts: \(url.lastPathComponent)")
             }
             return
@@ -243,28 +300,27 @@ class PhotoManager: ObservableObject {
         
         if let photo = PhotoModel(url: url) {
             DispatchQueue.main.async {
-                if !self.photos.contains(where: { $0.url == url }) {
+                if self.isCurrent(generation), !self.photos.contains(where: { $0.url == url }) {
                     self.photos.append(photo)
                     self.photos.sort { $0.timestamp > $1.timestamp }
                 }
             }
         }
         
-        removeFromProcessing(url)
+        removeFromProcessing(url, generation: generation)
     }
     
-    private func removeFromProcessing(_ url: URL) {
+    func removeFromProcessing(_ url: URL, generation: Int) {
         processingQueue.async {
-            self.processingFiles.remove(url)
+            self.lifecycle.release(url, generation: generation)
         }
     }
     
-    private func scanExistingFiles() {
-        guard let url = watchedFolderURL else { return }
+    private func scanExistingFiles(at url: URL, generation: Int) {
         do {
             let files = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)
             for file in files {
-                processNewFile(at: file)
+                processNewFile(at: file, generation: generation)
             }
         } catch {
             ErrorLog.shared.log("Failed to scan directory: \(error)")
@@ -273,16 +329,14 @@ class PhotoManager: ObservableObject {
     
     // MARK: - FSEvents Wrapper
     
-    private func startWatching() {
-        guard let folderURL = watchedFolderURL else { return }
-        stopWatching()
-        
+    private func startWatching(_ folderURL: URL, generation: Int) {
         let path = [folderURL.path] as CFArray
         
         // The C-callback function
         let callback: FSEventStreamCallback = { (streamRef, clientCallBackInfo, numEvents, eventPaths, eventFlags, eventIds) in
             guard let clientCallBackInfo = clientCallBackInfo else { return }
-            let manager = Unmanaged<PhotoManager>.fromOpaque(clientCallBackInfo).takeUnretainedValue()
+            let info = Unmanaged<StreamInfo>.fromOpaque(clientCallBackInfo).takeUnretainedValue()
+            guard let manager = info.manager else { return }
             guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else { return }
             
             for i in 0..<numEvents {
@@ -292,16 +346,16 @@ class PhotoManager: ObservableObject {
                 // Trigger only on new file creations or modifications
                 let isCreatedOrModified = (flags & UInt32(kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemModified)) != 0
                 if isCreatedOrModified {
-                    manager.processNewFile(at: url)
+                    manager.processNewFile(at: url, generation: info.generation)
                 }
             }
         }
         
         var context = FSEventStreamContext(
             version: 0,
-            info: Unmanaged.passUnretained(self).toOpaque(),
+            info: Unmanaged.passRetained(StreamInfo(manager: self, generation: generation)).toOpaque(),
             retain: nil,
-            release: nil,
+            release: { Unmanaged<StreamInfo>.fromOpaque($0!).release() },
             copyDescription: nil
         )
         
@@ -327,6 +381,7 @@ class PhotoManager: ObservableObject {
             FSEventStreamStop(stream)
             FSEventStreamInvalidate(stream)
             self.stream = nil
+            queue.async { FSEventStreamRelease(stream) }
         }
     }
     
