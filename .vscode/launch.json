@@ -1,0 +1,12 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run PhotoBoothAttract",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "bash \"${workspaceFolder}/scripts/build-run.sh\"",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
