@@ -20,6 +20,14 @@ todos:
 isProject: false
 ---
 
+# Historical Sony SDK Investigation
+
+> Historical, unverified notes, not the current implementation plan. The milestone
+> completion metadata and architecture claims below do not establish working SDK
+> initialization, connection, capture or image transfer. Preserve them as investigation
+> history, not acceptance evidence. [ROADMAP.md](ROADMAP.md) puts core cleanup first;
+> a fresh SDK audit and SDK punchlist come only after core cleanup is accepted.
+
 ## Goals
 
 - Replace the external tether-app dependency (Imaging Edge Desktop Remote) with **direct USB ingest** via Sony Camera Remote SDK.
@@ -31,7 +39,9 @@ isProject: false
 
 - **Photo ingestion today** is filesystem-based: `PhotoManager` watches a user-selected folder and calls `processNewFile(at:)` for `jpg/jpeg/png` once the file is fully written.
 
-```214:254:/Volumes/Mass Sync/Dev/repos/Mac_Repos/PhotoBoothAttract/PhotoBoothAttract/PhotoManager.swift
+Historical excerpt from [PhotoManager.swift](../PhotoBoothAttract/PhotoManager.swift):
+
+```swift
     func processNewFile(at url: URL, retries: Int = 0) {
         // ...
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -130,11 +140,11 @@ flowchart LR
 ## Key files likely to change/add
 
 - Existing:
-  - `/Volumes/Mass Sync/Dev/repos/Mac_Repos/PhotoBoothAttract/PhotoBoothAttract/PhotoManager.swift` (add a safe ingest entrypoint used by SDK callback, and/or reuse `processNewFile`)
-  - `/Volumes/Mass Sync/Dev/repos/Mac_Repos/PhotoBoothAttract/PhotoBoothAttract/AssistantView.swift` (camera status + controls)
-  - `/Volumes/Mass Sync/Dev/repos/Mac_Repos/PhotoBoothAttract/PhotoBoothAttract/AppDelegate.swift` or app bootstrap (lifecycle: init/release SDK)
-  - `/Volumes/Mass Sync/Dev/repos/Mac_Repos/PhotoBoothAttract/PhotoBoothAttractApp.swift` (add View menu command)
-  - `/Volumes/Mass Sync/Dev/repos/Mac_Repos/PhotoBoothAttract/PhotoBoothAttract.xcodeproj/project.pbxproj` (link/embed dylibs, bridging header if needed)
+  - [PhotoManager.swift](../PhotoBoothAttract/PhotoManager.swift) (add a safe ingest entrypoint used by SDK callback, and/or reuse `processNewFile`)
+  - [AssistantView.swift](../PhotoBoothAttract/AssistantView.swift) (camera status + controls)
+  - [AppDelegate.swift](../PhotoBoothAttract/AppDelegate.swift) or app bootstrap (lifecycle: init/release SDK)
+  - [PhotoBoothAttractApp.swift](../PhotoBoothAttract/PhotoBoothAttractApp.swift) (add View menu command)
+  - [project.pbxproj](../PhotoBoothAttract.xcodeproj/project.pbxproj) (link/embed dylibs, bridging header if needed)
 - New (proposed):
   - `PhotoBoothAttract/SonySDK/SonyCameraController.h` + `.mm` (ObjC++ wrapper)
   - `PhotoBoothAttract/SonySDK/SonyCameraManager.swift` (Swift-facing service + state)

@@ -60,7 +60,14 @@ The app is a **non-sandboxed** utility so it can access arbitrary folders and pr
 | `SettingsView.swift` | Printer configuration |
 | `ErrorLog.swift` | Persistent circular log and Error Log window |
 
-For phased implementation details and prompt directives, see **[IMPLEMENTATION_SPEC.md](IMPLEMENTATION_SPEC.md)**.
+## Documentation
+
+- [docs/BUGS.md](docs/BUGS.md) - Core bug punchlist, with links to evidence and acceptance checks.
+- [docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md) - Engineering evidence, verification limits and fix acceptance checks.
+- [docs/ROADMAP.md](docs/ROADMAP.md) - Core cleanup first; SDK reassessment and its punchlist afterward.
+- [docs/IMPLEMENTATION_SPEC.md](docs/IMPLEMENTATION_SPEC.md) - Original requirements, phased implementation history and prompt directives.
+- [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) - Recorded release history, not planned work.
+- [docs/usb_cam_sonySDK.md](docs/usb_cam_sonySDK.md) - Historical SDK investigation; milestone labels are not verification.
 
 ## License
 

@@ -1,5 +1,10 @@
 # PhotoBooth Attract — Implementation Spec
 
+> This document preserves the original requirements and implementation history.
+> Historical "implemented" labels are not current verification. See [BUGS.md](BUGS.md)
+> and [ENGINEERING_NOTES.md](ENGINEERING_NOTES.md) for the 2026-10-27 core review,
+> and [ROADMAP.md](ROADMAP.md) for current sequencing. Requirements below are unchanged.
+
 ## Scenario
 
 A photographer often does event coverage. After the event, she runs a **Photo Booth attraction**. The guest takes position and has their picture taken. An assistant works from an older 2012 MacBook Pro running macOS 15 Sequoia (e.g. with OpenCore Legacy Patcher). Performance is acceptable, but the GPU is on the weaker side.
