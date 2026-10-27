@@ -5,7 +5,7 @@ This roadmap is planned work, not release history or a claim that fixes have shi
 
 ## 1. Core Cleanup
 
-**Status:** In progress. CORE-001 is closed; eight items in [BUGS.md](BUGS.md) remain open.
+**Status:** In progress. CORE-001 and CORE-002 are closed; seven items in [BUGS.md](BUGS.md) remain open.
 
 1. Stabilize folder lifecycle and photo identity first: CORE-001 and CORE-002. Then cover filesystem events and move scans off the UI thread: CORE-004 and CORE-006.
 2. Fix clear-folder reporting, attachment isolation, orientation and print-failure handling: CORE-005, CORE-003, CORE-008 and CORE-007.

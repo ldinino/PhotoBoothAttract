@@ -88,6 +88,10 @@ different content. Duplicate notifications for unchanged files still produce one
 Cover same-path replacement and actions opened before replacement or a new arrival.
 Do not modify original images to achieve this.
 
+**Status: closed.** Fixed in PR #2 (`f07a25c`); automated, Debug build and current-build
+maintainer stale-selection UI checks pass. Output and hardware qualification below remain open
+at the overall core acceptance gate.
+
 **Baseline reproduction** (real `PhotoManager`/`PhotoModel` at daf701f, scratch harness): a red
 synthetic PNG was ingested, overwritten with a blue one and re-notified. Result: one row, thumbnail
 still red, file now blue.
@@ -104,7 +108,7 @@ missing file is rejected with an alert and nothing is printed or sent; the assis
 The selection is rejected rather than preserved, so no copy of the original needs ownership.
 
 **Automated:** `bash scripts/check-folder-lifecycle.sh` now compiles the real `PhotoManager`,
-`PhotoModel`, `PrintManager` and `MessageManager`, with stub print/share sinks. 55 checks pass,
+`PhotoModel`, `PrintManager` and `MessageManager`, with stub print/share sinks. 54 checks pass,
 including unchanged duplicates, in-place and atomic replacement, incomplete and never-completing
 replacement, a disappearing file, out-of-order publication, red 10 / red 30 / delayed blue 20
 (unchanged newer content keeps the watermark), a slow read that leaves the main run loop ticking
@@ -113,21 +117,27 @@ the sheet and during printing, a new arrival and a folder switch during the shee
 image colour asserted. Mutants: `url` (URL-only identity) fails 7 checks; `stale` 4; `watermark` 2;
 `mainread` (verify on main) 1; `release` 2, `current` 11, `clear` 4.
 
-**Build:** the Debug `xcodebuild` command from the brief succeeded.
+Independent review repeated the positive suite and the `url`, `stale`, `watermark` and `mainread`
+negative controls. All 54 assertions also pass on merged `main` at `f07a25c`, whose tree matches
+reviewed head `caf7619`.
 
-**UI (reported accessibility evidence, not visual inspection):** the real Debug app was launched
-with a temporary home and a one-photo synthetic folder. One row and three controls were present.
-After opening Digital Only and replacing the source, Send without number closed the sheet and
-showed the "Photo not sent" alert; no new Messages draft opened and one row remained. Only that
-instance was closed and its fixtures removed. This was run before the off-main change and has not
-been repeated since.
+**Build:** the actual Debug `xcodebuild` command from the brief succeeded independently on
+reviewed head `caf7619`.
 
-**Not verified:** thumbnail colour in the real window, Print only and numbered Send in the UI, the
-unchanged-success draft, physical printing, older Intel Macs (including the cost of reading and
-hashing originals there). The overall core acceptance gate stays open. Tunable: retries unchanged
-(5 x 0.5 s) before a never-completing replacement drops the row.
+**UI (2026-10-27, reviewed head `caf7619`):** the reviewer launched a temporary copy of the
+actual Debug app with a unique preferences domain, isolated home and synthetic fixture. The red
+preview and three row controls rendered. After opening Digital Only and replacing the source
+with blue, Send without number displayed the expected "Photo not sent" stale-selection alert.
+AXPress could not dismiss it, so dismissal was not inferred from automation. The maintainer then
+clicked OK manually and reported the requested usability check passing. Supplied before/after
+screenshots were inspected: the alert closes and exactly one blue-thumbnail row remains.
+Only the owned test instance was closed; its isolated defaults, app, home, fixtures and helper
+were removed. Original photos and saved event-folder settings were not changed.
 
-PR: see the pull request for this branch.
+**Not verified:** Print only and numbered Send in the UI, the unchanged-success draft, physical
+printing, older Intel Macs (including the cost of reading and hashing originals there). The
+overall core acceptance gate stays open. Tunable: retries unchanged (5 x 0.5 s) before a
+never-completing replacement drops the row.
 
 ## CORE-003: Attachment File Collisions
 
