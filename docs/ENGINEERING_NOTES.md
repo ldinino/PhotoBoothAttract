@@ -211,8 +211,8 @@ acceptance gate stays open.
 screenshots, helpers, SDK link, worktree and build output were removed. The original SDK and saved
 event settings were preserved. The unintended asset commit `527eeb0` was excluded from PR #3's
 final tree by follow-up commit `9df5df1`, without rewriting history. The latest replacement PNG
-is preserved in separate asset commit `40ca6e5` and open PR #4, with the local copy unchanged and
-the obsolete ICNS still absent. App-icon configuration was not changed.
+is preserved in separate asset PR #4, merged as `f827989`; the local copy is unchanged and now
+tracked on `main`. The obsolete ICNS remains absent. App-icon configuration was not changed.
 
 ## CORE-005: Clear-Folder Failure Reporting
 
