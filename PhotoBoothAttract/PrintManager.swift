@@ -26,9 +26,9 @@ class PrintManager: NSObject {
         }
     }
 
-    func printPhoto(at url: URL, completion: ((Bool) -> Void)? = nil) {
-        guard let image = NSImage(contentsOf: url) else {
-            ErrorLog.shared.log("PrintManager: Could not load image at \(url.path)")
+    func printPhoto(imageData: Data, name: String, completion: ((Bool) -> Void)? = nil) {
+        guard let image = NSImage(data: imageData) else {
+            ErrorLog.shared.log("PrintManager: Could not decode image \(name)")
             completion?(false)
             return
         }
@@ -68,7 +68,7 @@ class PrintManager: NSObject {
         let success = printOperation.run()
 
         if !success {
-            ErrorLog.shared.log("PrintManager: Print operation failed for \(url.lastPathComponent)")
+            ErrorLog.shared.log("PrintManager: Print operation failed for \(name)")
         }
         completion?(success)
     }
