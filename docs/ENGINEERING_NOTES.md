@@ -32,9 +32,10 @@ retries and publications from an earlier folder lifecycle cannot repopulate the 
 Cover switch, refresh and clear interactions, including completion after a switch.
 New arrivals must not retarget an action already in progress.
 
-**Status: open.** Automated and build checks pass; the live-app and hardware checks below are not done.
+**Status: closed.** Fixed in PR #1 (`3b315b2`); automated, build and maintainer-reported
+live-app checks pass. Older Intel verification remains outstanding at the overall core acceptance gate.
 
-**Fix** (branch `fix/core-001-folder-lifecycle`, PR #1): `FolderLifecycle` in
+**Fix** (PR #1, merged as `3b315b2`): `FolderLifecycle` in
 PhotoManager.swift holds a generation counter and per-URL claims tagged with their generation.
 Selection and refresh call `beginLifecycle()`, which stops the watcher, clears photos, resets
 busy flags and bumps the generation. Scans, retries, FSEvents callbacks (generation stored per
@@ -56,9 +57,22 @@ after the clear completes, using files outside the cleared folder so they surviv
 **Build:** the Debug `xcodebuild` command from the brief succeeded. A standalone launch with the
 saved folder suppressed stayed up for 6 seconds without stderr output.
 
-**Not verified:** folder selection, refresh, confirmed clear and live hot-folder arrivals in the
-running app; empty state and busy controls on screen; single- and dual-display behavior; older
-Intel Mac. Selecting a folder in the app overwrites the saved bookmark, so these need a manual run.
+**Maintainer manual verification (2026-10-27):** all five requested smoke checks reported passing;
+the repository was on merged `main` at `3b315b2`. These are maintainer-reported results, not
+automated UI inspection.
+
+1. Folder A-B-A and empty-folder selection show only the selected folder's photos.
+2. Live hot-folder arrivals appear without Refresh, newest first, with matching assistant/guest numbers.
+3. Switching to B while a photo is being copied into A does not publish A's photo into B.
+4. Refresh finishes without duplicates; confirmed clear removes disposable photos without reappearance;
+  a subsequent arrival appears normally.
+5. Guest-TV display and disconnect/reconnect pass; the assistant remains usable, with no recipient
+  entry or settings on the guest display.
+
+**Remaining verification:** Mac model and macOS version were not supplied, so older Intel
+performance/compatibility is not established by this report. Printing and Messages were not part
+of these checks. The overall core acceptance gate remains open.
+
 **Remaining gap:** after a clear, arrivals that land while deletion is in progress are removed from the list at completion even if their files remain (CORE-005 territory).
 
 ## CORE-002: Preview and Action Identity

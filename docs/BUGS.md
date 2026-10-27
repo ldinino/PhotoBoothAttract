@@ -1,12 +1,12 @@
 # Core Bug Punchlist
 
-All items are open. Reviewed on 2026-10-27 at `1a7089b`.
+CORE-001 is closed; eight items remain open. Baseline reviewed on 2026-10-27 at `1a7089b`.
 See [ENGINEERING_NOTES.md](ENGINEERING_NOTES.md) for evidence and acceptance checks,
 and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until core cleanup is accepted.
 
 ## High Priority
 
-- [ ] **CORE-001: Folder lifecycle.** Switching folders retains old photos; pending retries can publish photos from the previous folder. **Reproduced.** [Notes](ENGINEERING_NOTES.md#core-001-folder-lifecycle)
+- [x] **CORE-001: Folder lifecycle.** Fixed in PR #1 (`3b315b2`). Automated checks, Debug build and maintainer live-app smoke checks pass. [Notes](ENGINEERING_NOTES.md#core-001-folder-lifecycle)
 - [ ] **CORE-002: Preview/action mismatch.** Replacing a file leaves its old thumbnail, while print/share actions read the replacement image. **Reproduced.** [Notes](ENGINEERING_NOTES.md#core-002-preview-and-action-identity)
 
 ## Medium Priority
