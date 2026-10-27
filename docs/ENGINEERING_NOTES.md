@@ -163,7 +163,11 @@ Live removal and rename tests were attempted but blocked by standalone event del
 Deleted or moved-out files stop being actionable. Repeated events remain idempotent.
 Verify actual FSEvents with synthetic files; preserve incomplete-write handling.
 
-**Implementation (branch `fix/core-004-filesystem-events`):** the callback now reconciles on
+**Status: closed.** Fixed in PR #3 (`6fe6bde`); automated, live-watcher, Debug build and
+single-display real-window checks pass. Guest-display and older Intel qualification remain open
+at the overall core acceptance gate.
+
+**Implementation (PR #3, merged as `6fe6bde`):** the callback now reconciles on
 create, modify, rename and remove flags (directories ignored) and decides arrival or departure
 from the file's current state. The observation sequence is taken before the filesystem check, so a
 late absence result cannot outrank a newer arrival. Removal records a per-path tombstone in `FolderLifecycle`;
@@ -177,17 +181,38 @@ old-folder callbacks, late absence observation after recreation, action rejectio
 Negative controls: `LIFECYCLE_MUTANT=events` (3 FAILED), `tombstone` (3), `wrongremove` (3),
 `lateabsence` (2); correct code restored and rerun.
 
+Independent review also replayed the original paused-worker race against the production
+reconciliation path: recreate and ingest blue while an absence result is paused, then resume it.
+The new row survives; restoring late sequence allocation in a temporary copy reproduces the
+failure. Reviewer mutant results were `lateabsence` 2, `tombstone` 3 and `wrongremove` 2;
+exact totals around live-watcher cases can vary with timing. All 77 correct-code assertions pass
+again on the asset-free reviewed head `9df5df1` and on merged `main` at `6fe6bde`.
+
 **Live FSEvents:** the same harness uses the real watcher on synthetic folders with no manual
 ingestion: create, delete, recreate, rename into, out of and within the folder were all observed
 automatically.
 
-**Build:** the Debug `xcodebuild` command from the brief succeeded.
+**Build:** the actual Debug `xcodebuild` command from the brief succeeded independently in a
+clean worktree at `9df5df1`, using the existing local SDK. Unrelated icon sources were absent
+from both the source tree and built app resources.
 
-**UI:** not performed (no isolated-preferences app launch). **Hardware:** not performed; older
-Intel Macs unverified. The overall core acceptance gate stays open.
+**UI:** an isolated copy of the real Debug app used a unique preferences domain and temporary
+home with synthetic files. The Assistant window followed create, delete, same-path recreation,
+move out, move into and rename within the folder automatically, without Refresh or manual
+ingestion. Accessibility checked each row/empty-state transition; screenshots were inspected
+for the red source row, deletion empty state and renamed blue row. Application code was unchanged
+between this UI check at `c6af1fe` and asset-only scope cleanup at `9df5df1`.
 
-**Cleanup:** temporary harness folders removed. `icon.icns` and `icon.png` were committed to this
-branch by the maintainer (527eeb0), not by this task; left untouched.
+**Not verified:** no guest window was present for this check; guest-display and older Intel
+behavior remain unverified. Physical printing and Messages were not exercised. The overall core
+acceptance gate stays open.
+
+**Cleanup and scope:** only reviewer-owned app instances were closed; temporary homes, fixtures,
+screenshots, helpers, SDK link, worktree and build output were removed. The original SDK and saved
+event settings were preserved. The unintended asset commit `527eeb0` was excluded from PR #3's
+final tree by follow-up commit `9df5df1`, without rewriting history. The latest replacement PNG
+is preserved in separate asset commit `40ca6e5` and open PR #4, with the local copy unchanged and
+the obsolete ICNS still absent. App-icon configuration was not changed.
 
 ## CORE-005: Clear-Folder Failure Reporting
 

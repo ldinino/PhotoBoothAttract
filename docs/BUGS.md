@@ -1,6 +1,6 @@
 # Core Bug Punchlist
 
-CORE-001 and CORE-002 are closed; seven items remain open. Baseline reviewed on 2026-10-27 at `1a7089b`.
+CORE-001, CORE-002 and CORE-004 are closed; six items remain open. Baseline reviewed on 2026-10-27 at `1a7089b`.
 See [ENGINEERING_NOTES.md](ENGINEERING_NOTES.md) for evidence and acceptance checks,
 and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until core cleanup is accepted.
 
@@ -12,7 +12,7 @@ and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until cor
 ## Medium Priority
 
 - [ ] **CORE-003: Attachment collisions.** Different photos with the same basename overwrite the same temporary share file. **File overwrite reproduced; Messages consumption unverified.** [Notes](ENGINEERING_NOTES.md#core-003-attachment-file-collisions)
-- [ ] **CORE-004: Missing filesystem events.** Deletions and rename-only arrivals are not handled by the watcher callback. **Source-confirmed; live delivery unverified.** [Notes](ENGINEERING_NOTES.md#core-004-filesystem-event-coverage)
+- [x] **CORE-004: Missing filesystem events.** Fixed in PR #3 (`6fe6bde`). Automated checks, live FSEvents, Debug build and isolated real-window updates pass. [Notes](ENGINEERING_NOTES.md#core-004-filesystem-event-coverage)
 - [ ] **CORE-005: Clear-folder failures.** Failed deletions still report success and remove surviving photos from the interface. **Reproduced.** [Notes](ENGINEERING_NOTES.md#core-005-clear-folder-failure-reporting)
 - [ ] **CORE-006: Blocking initial scan.** Startup and folder selection enumerate files and generate thumbnails on the UI thread. **Source-confirmed; event-Mac impact unmeasured.** [Notes](ENGINEERING_NOTES.md#core-006-initial-scan-blocks-the-ui)
 - [ ] **CORE-007: Ignored print failure.** Print & Digital opens the draft and dismisses the sheet regardless of the print result. **Source-confirmed; no print attempted.** [Notes](ENGINEERING_NOTES.md#core-007-print-and-digital-failure-handling)
