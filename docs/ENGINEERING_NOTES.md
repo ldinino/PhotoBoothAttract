@@ -88,6 +88,47 @@ different content. Duplicate notifications for unchanged files still produce one
 Cover same-path replacement and actions opened before replacement or a new arrival.
 Do not modify original images to achieve this.
 
+**Baseline reproduction** (real `PhotoManager`/`PhotoModel` at daf701f, scratch harness): a red
+synthetic PNG was ingested, overwritten with a blue one and re-notified. Result: one row, thumbnail
+still red, file now blue.
+
+**Design:** `PhotoModel` reads the file once and derives both the thumbnail and a SHA-256 digest
+from those bytes, plus a per-manager `sequence`. `PhotoManager.publish` keeps one row per URL:
+an older sequence is ignored, a newer read of the same digest only advances the row's sequence (identity kept), and a newer different revision replaces the row. An event
+that arrives while its URL is claimed is remembered and the URL is re-read on release (previously
+dropped). A replacement that never becomes a complete image removes that URL's row. Actions carry
+the selected `PhotoModel`; `perform` reads the source once, checks the digest and hands the same
+`Data` to print and share (`PrintManager`/`MessageManager` no longer reopen the URL). The read and
+hash run on a background queue; the sinks then run on the main thread with those bytes. A changed or
+missing file is rejected with an alert and nothing is printed or sent; the assistant reselects.
+The selection is rejected rather than preserved, so no copy of the original needs ownership.
+
+**Automated:** `bash scripts/check-folder-lifecycle.sh` now compiles the real `PhotoManager`,
+`PhotoModel`, `PrintManager` and `MessageManager`, with stub print/share sinks. 55 checks pass,
+including unchanged duplicates, in-place and atomic replacement, incomplete and never-completing
+replacement, a disappearing file, out-of-order publication, red 10 / red 30 / delayed blue 20
+(unchanged newer content keeps the watermark), a slow read that leaves the main run loop ticking
+and outputs the selected snapshot on the main thread, replacement before the click, after opening
+the sheet and during printing, a new arrival and a folder switch during the sheet, with decoded
+image colour asserted. Mutants: `url` (URL-only identity) fails 7 checks; `stale` 4; `watermark` 2;
+`mainread` (verify on main) 1; `release` 2, `current` 11, `clear` 4.
+
+**Build:** the Debug `xcodebuild` command from the brief succeeded.
+
+**UI (reported accessibility evidence, not visual inspection):** the real Debug app was launched
+with a temporary home and a one-photo synthetic folder. One row and three controls were present.
+After opening Digital Only and replacing the source, Send without number closed the sheet and
+showed the "Photo not sent" alert; no new Messages draft opened and one row remained. Only that
+instance was closed and its fixtures removed. This was run before the off-main change and has not
+been repeated since.
+
+**Not verified:** thumbnail colour in the real window, Print only and numbered Send in the UI, the
+unchanged-success draft, physical printing, older Intel Macs (including the cost of reading and
+hashing originals there). The overall core acceptance gate stays open. Tunable: retries unchanged
+(5 x 0.5 s) before a never-completing replacement drops the row.
+
+PR: see the pull request for this branch.
+
 ## CORE-003: Attachment File Collisions
 
 **Owner:** [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift#L101).

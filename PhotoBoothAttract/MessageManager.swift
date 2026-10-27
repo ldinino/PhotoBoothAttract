@@ -22,19 +22,14 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
     private static let fallbackQuality: CGFloat = 0.85
     private static let messageBody = "Thank you for choosing SD Photography. https://www.sd-photo.com/"
 
-    func prepareDraft(imageURL: URL, phoneNumber: String) {
-        guard FileManager.default.fileExists(atPath: imageURL.path) else {
-            ErrorLog.shared.log("MessageManager: Image not found at \(imageURL.path)")
-            return
-        }
-
+    func prepareDraft(imageData: Data, name: String, phoneNumber: String) {
         let sanitized = phoneNumber.filter { $0.isNumber || $0 == "+" }
         guard !sanitized.isEmpty else {
             ErrorLog.shared.log("MessageManager: Invalid phone number")
             return
         }
 
-        let sendURL = compressedCopy(of: imageURL) ?? imageURL
+        guard let sendURL = attachmentURL(for: imageData, name: name) else { return }
 
         guard let service = NSSharingService(named: .composeMessage) else {
             ErrorLog.shared.log("MessageManager: composeMessage service unavailable")
@@ -46,13 +41,8 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
         service.perform(withItems: [Self.messageBody, sendURL])
     }
 
-    func prepareDraftWithoutRecipient(imageURL: URL) {
-        guard FileManager.default.fileExists(atPath: imageURL.path) else {
-            ErrorLog.shared.log("MessageManager: Image not found at \(imageURL.path)")
-            return
-        }
-
-        let sendURL = compressedCopy(of: imageURL) ?? imageURL
+    func prepareDraftWithoutRecipient(imageData: Data, name: String) {
+        guard let sendURL = attachmentURL(for: imageData, name: name) else { return }
 
         guard let service = NSSharingService(named: .composeMessage) else {
             ErrorLog.shared.log("MessageManager: composeMessage service unavailable")
@@ -61,6 +51,19 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
 
         service.delegate = self
         service.perform(withItems: [Self.messageBody, sendURL])
+    }
+
+    /// The compressed copy, or the verified bytes written out unchanged if compression fails.
+    private func attachmentURL(for data: Data, name: String) -> URL? {
+        if let url = compressedCopy(of: data, name: name) { return url }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            ErrorLog.shared.log("MessageManager: Could not write attachment: \(error)")
+            return nil
+        }
     }
 
     // MARK: - Image Compression
@@ -88,8 +91,8 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
     }
 
     /// Produces a JPEG copy sized for MMS (≤ targetFileSizeBytes) at the highest quality that fits.
-    private func compressedCopy(of sourceURL: URL) -> URL? {
-        guard let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
+    private func compressedCopy(of data: Data, name: String) -> URL? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             ErrorLog.shared.log("MessageManager: Could not read source image for compression")
             return nil
@@ -99,7 +102,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
         let needsDownscale = cgImage.width > maxDim || cgImage.height > maxDim
 
         let destURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(sourceURL.deletingPathExtension().lastPathComponent + "_send")
+            .appendingPathComponent((name as NSString).deletingPathExtension + "_send")
             .appendingPathExtension("jpg")
 
         var finalImage: CGImage = cgImage

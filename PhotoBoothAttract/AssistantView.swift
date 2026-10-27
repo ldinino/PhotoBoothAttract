@@ -10,7 +10,7 @@ import SwiftUI
 
 struct SheetRequest: Identifiable {
     let id = UUID()
-    let photoURL: URL
+    let photo: PhotoModel
     let shouldPrint: Bool
 }
 
@@ -24,6 +24,8 @@ struct AssistantView: View {
     @State private var showClearResultAlert = false
     @State private var clearResultTitle = ""
     @State private var clearResultMessage = ""
+    @State private var showStaleAlert = false
+    @State private var staleMessage = ""
 
     private var refreshButton: some View {
         Button {
@@ -158,10 +160,11 @@ struct AssistantView: View {
                                     photo: photo,
                                     index: index,
                                     rowWidth: rowWidth,
-                                    onRequestSheet: { url, wantsPrint in
+                                    onRequestSheet: { photo, wantsPrint in
                                         phoneNumber = ""
-                                        sheetRequest = SheetRequest(photoURL: url, shouldPrint: wantsPrint)
-                                    }
+                                        sheetRequest = SheetRequest(photo: photo, shouldPrint: wantsPrint)
+                                    },
+                                    onFailure: reportFailure
                                 )
                             }
                         }
@@ -191,11 +194,17 @@ struct AssistantView: View {
         .animation(.easeInOut(duration: 0.25), value: photoManager.isClearing)
         .sheet(item: $sheetRequest) { request in
             PhoneNumberSheet(
-                photoURL: request.photoURL,
+                photo: request.photo,
                 shouldPrint: request.shouldPrint,
                 phoneNumber: $phoneNumber,
-                sheetRequest: $sheetRequest
+                sheetRequest: $sheetRequest,
+                onFailure: reportFailure
             )
+        }
+        .alert("Photo not sent", isPresented: $showStaleAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(staleMessage)
         }
         .confirmationDialog("Clear folder?", isPresented: $showClearConfirmation) {
             Button("Delete All", role: .destructive) {
@@ -212,6 +221,13 @@ struct AssistantView: View {
         } message: {
             Text(clearResultMessage)
         }
+    }
+
+    private func reportFailure(_ error: PhotoSourceError) {
+        staleMessage = error == .changed
+            ? "This photo was replaced after you selected it. Nothing was printed or sent. Select it again."
+            : "This photo's file is no longer available. Nothing was printed or sent."
+        showStaleAlert = true
     }
 
     private func performClearFolder() {
@@ -248,7 +264,8 @@ struct AssistantPhotoRow: View {
     let photo: PhotoModel
     let index: Int
     let rowWidth: CGFloat
-    var onRequestSheet: (URL, Bool) -> Void
+    var onRequestSheet: (PhotoModel, Bool) -> Void
+    var onFailure: (PhotoSourceError) -> Void
 
     private var isCompact: Bool { rowWidth < 460 }
     private var isWide: Bool { rowWidth >= 560 }
@@ -313,7 +330,7 @@ struct AssistantPhotoRow: View {
         let btnHeight: CGFloat = showLabels ? 56 : 40
 
         return HStack(spacing: isCompact ? 4 : 8) {
-            Button(action: { onRequestSheet(photo.url, true) }) {
+            Button(action: { onRequestSheet(photo, true) }) {
                 VStack(spacing: 2) {
                     Text("🖨️+✉️")
                         .font(showLabels ? .title3 : .body)
@@ -331,7 +348,9 @@ struct AssistantPhotoRow: View {
             .buttonStyle(.bordered)
             .tint(.blue)
 
-            Button(action: { PrintManager.shared.printPhoto(at: photo.url) }) {
+            Button(action: {
+                photo.perform(print: true, share: false) { if let error = $0 { onFailure(error) } }
+            }) {
                 VStack(spacing: 2) {
                     Text("🖨️")
                         .font(showLabels ? .title3 : .body)
@@ -347,7 +366,7 @@ struct AssistantPhotoRow: View {
             .buttonStyle(.bordered)
             .tint(.orange)
 
-            Button(action: { onRequestSheet(photo.url, false) }) {
+            Button(action: { onRequestSheet(photo, false) }) {
                 VStack(spacing: 2) {
                     Text("✉️")
                         .font(showLabels ? .title3 : .body)
@@ -367,10 +386,11 @@ struct AssistantPhotoRow: View {
 }
 
 struct PhoneNumberSheet: View {
-    let photoURL: URL
+    let photo: PhotoModel
     let shouldPrint: Bool
     @Binding var phoneNumber: String
     @Binding var sheetRequest: SheetRequest?
+    var onFailure: (PhotoSourceError) -> Void
 
     var body: some View {
         VStack(spacing: 20) {
@@ -378,7 +398,7 @@ struct PhoneNumberSheet: View {
                 .font(.title2)
                 .bold()
 
-            Text(photoURL.lastPathComponent)
+            Text(photo.url.lastPathComponent)
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -394,11 +414,7 @@ struct PhoneNumberSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 Button("Send without number") {
-                    if shouldPrint {
-                        PrintManager.shared.printPhoto(at: photoURL)
-                    }
-                    MessageManager.shared.prepareDraftWithoutRecipient(imageURL: photoURL)
-                    sheetRequest = nil
+                    submit(recipient: nil)
                 }
 
                 Button("Send") {
@@ -415,11 +431,13 @@ struct PhoneNumberSheet: View {
     private func send() {
         let trimmed = phoneNumber.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
+        submit(recipient: trimmed)
+    }
 
-        if shouldPrint {
-            PrintManager.shared.printPhoto(at: photoURL)
-        }
-        MessageManager.shared.prepareDraft(imageURL: photoURL, phoneNumber: trimmed)
+    private func submit(recipient: String?) {
         sheetRequest = nil
+        photo.perform(print: shouldPrint, share: true, recipient: recipient) {
+            if let error = $0 { onFailure(error) }
+        }
     }
 }

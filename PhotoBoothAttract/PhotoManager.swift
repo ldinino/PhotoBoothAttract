@@ -22,11 +22,19 @@ enum ClearFolderError: Error {
 nonisolated struct FolderLifecycle {
     private(set) var generation = 0
     private var claims: [URL: Int] = [:]
+    private var changedWhileClaimed: Set<URL> = []
+    private var lastSequence = 0
 
     mutating func begin() -> Int {
         generation += 1
         claims.removeAll()
+        changedWhileClaimed.removeAll()
         return generation
+    }
+
+    mutating func nextSequence() -> Int {
+        lastSequence += 1
+        return lastSequence
     }
 
     func isCurrent(_ generation: Int) -> Bool {
@@ -38,13 +46,21 @@ nonisolated struct FolderLifecycle {
     }
 
     mutating func claim(_ url: URL, generation: Int) -> Bool {
-        guard isCurrent(generation), claims[url] == nil else { return false }
+        guard isCurrent(generation) else { return false }
+        guard claims[url] == nil else {
+            changedWhileClaimed.insert(url)
+            return false
+        }
         claims[url] = generation
         return true
     }
 
-    mutating func release(_ url: URL, generation: Int) {
-        if claims[url] == generation { claims[url] = nil }
+    /// Returns true when an event arrived while the URL was claimed, so it must be read again.
+    @discardableResult
+    mutating func release(_ url: URL, generation: Int) -> Bool {
+        guard claims[url] == generation else { return false }
+        claims[url] = nil
+        return changedWhileClaimed.remove(url) != nil
     }
 }
 
@@ -285,34 +301,48 @@ class PhotoManager: ObservableObject {
             return
         }
         
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              CGImageSourceGetStatus(source) == .statusComplete else {
+        let sequence = processingQueue.sync { lifecycle.nextSequence() }
+        guard let photo = PhotoModel(url: url, sequence: sequence) else {
             if retries < 5 {
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
                     self.processNewFile(at: url, generation: generation, retries: retries + 1)
                 }
             } else {
-                removeFromProcessing(url, generation: generation)
                 ErrorLog.shared.log("Failed to read file after multiple attempts: \(url.lastPathComponent)")
+                DispatchQueue.main.async {
+                    if self.isCurrent(generation) { self.photos.removeAll { $0.url == url } }
+                }
+                removeFromProcessing(url, generation: generation)
             }
             return
         }
-        
-        if let photo = PhotoModel(url: url) {
-            DispatchQueue.main.async {
-                if self.isCurrent(generation), !self.photos.contains(where: { $0.url == url }) {
-                    self.photos.append(photo)
-                    self.photos.sort { $0.timestamp > $1.timestamp }
-                }
-            }
-        }
-        
+
+        DispatchQueue.main.async { self.publish(photo, generation: generation) }
         removeFromProcessing(url, generation: generation)
+    }
+
+    /// One row per URL. A changed revision replaces the row; an unchanged or older one is ignored.
+    func publish(_ photo: PhotoModel, generation: Int) {
+        guard isCurrent(generation) else { return }
+        if let index = photos.firstIndex(where: { $0.url == photo.url }) {
+            let current = photos[index]
+            guard photo.sequence > current.sequence else { return }
+            if photo.digest == current.digest {
+                photos[index].sequence = photo.sequence
+                return
+            }
+            photos[index] = photo
+        } else {
+            photos.append(photo)
+        }
+        photos.sort { $0.timestamp > $1.timestamp }
     }
     
     func removeFromProcessing(_ url: URL, generation: Int) {
         processingQueue.async {
-            self.lifecycle.release(url, generation: generation)
+            if self.lifecycle.release(url, generation: generation) {
+                DispatchQueue.global().async { self.processNewFile(at: url, generation: generation) }
+            }
         }
     }
     
