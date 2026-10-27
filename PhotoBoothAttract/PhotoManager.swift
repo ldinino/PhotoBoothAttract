@@ -326,7 +326,11 @@ class PhotoManager: ObservableObject {
         guard isCurrent(generation) else { return }
         if let index = photos.firstIndex(where: { $0.url == photo.url }) {
             let current = photos[index]
-            guard photo.sequence > current.sequence, photo.digest != current.digest else { return }
+            guard photo.sequence > current.sequence else { return }
+            if photo.digest == current.digest {
+                photos[index].sequence = photo.sequence
+                return
+            }
             photos[index] = photo
         } else {
             photos.append(photo)

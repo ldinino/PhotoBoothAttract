@@ -349,7 +349,7 @@ struct AssistantPhotoRow: View {
             .tint(.blue)
 
             Button(action: {
-                if let error = photo.perform(print: true, share: false) { onFailure(error) }
+                photo.perform(print: true, share: false) { if let error = $0 { onFailure(error) } }
             }) {
                 VStack(spacing: 2) {
                     Text("🖨️")
@@ -436,8 +436,8 @@ struct PhoneNumberSheet: View {
 
     private func submit(recipient: String?) {
         sheetRequest = nil
-        if let error = photo.perform(print: shouldPrint, share: true, recipient: recipient) {
-            onFailure(error)
+        photo.perform(print: shouldPrint, share: true, recipient: recipient) {
+            if let error = $0 { onFailure(error) }
         }
     }
 }

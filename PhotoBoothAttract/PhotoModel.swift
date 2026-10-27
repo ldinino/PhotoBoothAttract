@@ -41,7 +41,7 @@ struct PhotoModel: Identifiable {
     /// Hash of the exact bytes the thumbnail was decoded from.
     let digest: SHA256.Digest
     /// Orders revisions of one URL; a lower value never replaces a higher one.
-    let sequence: Int
+    var sequence: Int
 
     /// Nil when the file is unreadable or not yet a complete image.
     init?(url: URL, sequence: Int = 0) {
@@ -75,21 +75,28 @@ struct PhotoModel: Identifiable {
     }
 
     /// Reads the source once and returns the bytes only if they are the ones this photo shows.
-    func verifiedData() -> Result<Data, PhotoSourceError> {
-        guard let data = try? Data(contentsOf: url) else { return .failure(.unavailable) }
+    func verifiedData(read: (URL) -> Data? = { try? Data(contentsOf: $0) }) -> Result<Data, PhotoSourceError> {
+        guard let data = read(url) else { return .failure(.unavailable) }
         return SHA256.hash(data: data) == digest ? .success(data) : .failure(.changed)
     }
 
-    /// Print and share consume the same verified bytes; nothing reopens the URL afterwards.
-    func perform(print: Bool, share: Bool, recipient: String? = nil, sinks: ActionSinks = .live) -> PhotoSourceError? {
-        switch verifiedData() {
-        case .failure(let error):
-            return error
-        case .success(let data):
-            let name = url.lastPathComponent
-            if print { sinks.print(data, name) }
-            if share { sinks.share(data, name, recipient) }
-            return nil
+    /// Reads and verifies off the main thread, then runs the sinks on main with those same bytes; nothing reopens the URL.
+    func perform(print: Bool, share: Bool, recipient: String? = nil, sinks: ActionSinks = .live,
+                 read: @escaping (URL) -> Data? = { try? Data(contentsOf: $0) },
+                 completion: @escaping (PhotoSourceError?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = verifiedData(read: read)
+            DispatchQueue.main.async {
+                switch result {
+                case .failure(let error):
+                    completion(error)
+                case .success(let data):
+                    let name = url.lastPathComponent
+                    if print { sinks.print(data, name) }
+                    if share { sinks.share(data, name, recipient) }
+                    completion(nil)
+                }
+            }
         }
     }
 }
