@@ -3,6 +3,8 @@
 # MessageManager with a logging stub, so no app log, printer or Messages is touched. Actions run
 # against stub sinks. Synthetic images only, in disposable temp folders.
 # LIFECYCLE_MUTANT=release|current|clear breaks FolderLifecycle on purpose; the checks must then fail.
+# LIFECYCLE_MUTANT=events|tombstone|wrongremove|lateabsence: ignore rename/remove flags | no stale-read tombstone | removal
+# also drops a newer replacement.
 # LIFECYCLE_MUTANT=url|stale|watermark|mainread: URL-only identity | older revision wins | unchanged reads
 # do not advance ordering | verification reads on the main thread.
 set -euo pipefail
@@ -14,6 +16,10 @@ trap 'rm -rf "$WORK"; defaults delete "$EXE" >/dev/null 2>&1 || true' EXIT
 
 sed -E 's/private (func|var|let)/\1/' "$SRC/PhotoManager.swift" > "$WORK/PhotoManager.swift"
 case "${LIFECYCLE_MUTANT:-}" in
+    events) sed -i '' 's/flags \& UInt32(wanted) != 0/flags \& UInt32(kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemModified) != 0/' "$WORK/PhotoManager.swift" ;;
+    tombstone) sed -i '' 's/sequence > (removedAt\[url\] ?? 0)/true/' "$WORK/PhotoManager.swift" ;;
+    wrongremove) sed -i '' 's/\$0.url == url \&\& \$0.sequence < sequence/$0.url == url/' "$WORK/PhotoManager.swift" ;;
+    lateabsence) sed -i '' 's/func removePhoto(at url: URL, generation: Int, observedAt sequence: Int) {/&\n        let sequence = nextSequence()/' "$WORK/PhotoManager.swift" ;;
     release) sed -i '' 's/guard claims\[url\] == generation else { return false }/guard true else { return false }/' "$WORK/PhotoManager.swift" ;;
     url) sed -i '' 's/photo.digest == current.digest/true/' "$WORK/PhotoManager.swift" ;;
     stale) sed -i '' 's/guard photo.sequence > current.sequence else { return }//' "$WORK/PhotoManager.swift" ;;
@@ -333,6 +339,111 @@ spin(0.4)
 check("main run loop stays responsive and nothing is output while the read is pending", ticks >= 5 && !doneF && recF.prints.count == beforeSinks)
 waitUntil(5) { doneF }; timer.invalidate()
 check("delayed read outputs the selected snapshot on the main thread", resultF == nil && recF.prints.map(tint) == ["red"] && recF.allOnMain)
+
+// CORE-004: filesystem events. Flags are only a hint; the file's current state decides.
+let fl = { (f: Int) in UInt32(f) }
+check("flags: create/modify/rename/remove and combinations are relevant",
+      [kFSEventStreamEventFlagItemCreated, kFSEventStreamEventFlagItemModified, kFSEventStreamEventFlagItemRenamed, kFSEventStreamEventFlagItemRemoved].allSatisfy { PhotoManager.isRelevant(flags: fl(Int($0))) }
+      && PhotoManager.isRelevant(flags: fl(kFSEventStreamEventFlagItemRenamed | kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemRemoved)))
+check("flags: directories and unrelated flags are ignored",
+      !PhotoManager.isRelevant(flags: fl(kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemIsDir)) && !PhotoManager.isRelevant(flags: fl(kFSEventStreamEventFlagItemXattrMod)))
+
+let Ev = folder("Ev"); let ea = Ev.appendingPathComponent("ea.png"), eb = Ev.appendingPathComponent("eb.png")
+png(ea, created: Date().addingTimeInterval(-50)); png(eb, created: Date().addingTimeInterval(-40))
+m.setWatchedFolder(Ev); spin(0.8)
+let gE = m.generation
+let ea1 = row(m, "ea.png")!
+
+try! FileManager.default.removeItem(at: ea)
+m.reconcile(ea, generation: gE); m.reconcile(ea, generation: gE); waitUntil(3) { row(m, "ea.png") == nil }
+check("removal drops only that row, repeated removal is harmless", names(m) == ["eb.png"])
+let recEa = Rec()
+check("removed row cannot be acted on", act(ea1, print: true, share: true, recEa) == .unavailable && recEa.prints.isEmpty && recEa.shares.isEmpty)
+
+let moved = Ev.appendingPathComponent("moved.png")
+try! FileManager.default.moveItem(at: eb, to: moved)
+m.reconcile(eb, generation: gE); m.reconcile(moved, generation: gE); waitUntil(3) { names(m) == ["moved.png"] }
+check("rename within the folder: old row leaves, new row arrives", names(m) == ["moved.png"])
+
+let outside = X.appendingPathComponent("in.png"); png(outside)
+try! FileManager.default.moveItem(at: outside, to: Ev.appendingPathComponent("in.png"))
+m.reconcile(Ev.appendingPathComponent("in.png"), generation: gE); waitUntil(3) { row(m, "in.png") != nil }
+check("rename into the folder appears", row(m, "in.png") != nil)
+let inRow = row(m, "in.png")!
+try! FileManager.default.moveItem(at: Ev.appendingPathComponent("in.png"), to: X.appendingPathComponent("out.png"))
+m.reconcile(Ev.appendingPathComponent("in.png"), generation: gE); waitUntil(3) { row(m, "in.png") == nil }
+check("rename out of the folder leaves, and its row is rejected", row(m, "in.png") == nil && act(inRow, print: true, share: false, Rec()) == .unavailable)
+
+let inc = Ev.appendingPathComponent("inc.png"); try! Data([1, 2, 3, 4, 5, 6, 7, 8, 9]).write(to: inc)
+m.reconcile(inc, generation: gE); spin(0.3)
+check("incomplete arrival is not listed yet", row(m, "inc.png") == nil)
+png(inc); waitUntil(3) { row(m, "inc.png") != nil }
+check("incomplete arrival is listed once completed", row(m, "inc.png") != nil)
+
+// Removal during a pending read: the read must not resurrect the row
+let pend = X.appendingPathComponent("pend.png"); png(pend)
+let staleRead = PhotoModel(url: pend, sequence: m.nextSequence())!
+try! FileManager.default.removeItem(at: pend)
+m.removePhoto(at: pend, generation: gE, observedAt: m.nextSequence()); spin(0.3)
+m.publish(staleRead, generation: gE)
+check("read started before a removal cannot publish after it", row(m, "pend.png") == nil)
+
+// Deletion before queued publication, then recreation of the same path
+let rc = Ev.appendingPathComponent("rc.png"); png(rc, color: .red)
+m.processNewFile(at: rc, generation: gE); waitUntil(3) { row(m, "rc.png") != nil }
+let rcOld = row(m, "rc.png")!
+let queued = PhotoModel(url: rc, sequence: m.nextSequence())!
+try! FileManager.default.removeItem(at: rc)
+m.removePhoto(at: rc, generation: gE, observedAt: m.nextSequence()); waitUntil(3) { row(m, "rc.png") == nil }
+m.publish(queued, generation: gE)
+check("publication queued before deletion does not resurrect the row", row(m, "rc.png") == nil)
+png(rc, color: .blue)
+m.reconcile(rc, generation: gE); waitUntil(3) { row(m, "rc.png") != nil }
+check("same-path recreation is listed as a new row", row(m, "rc.png").map(tint) == "blue" && row(m, "rc.png")!.id != rcOld.id)
+let recRc = Rec()
+check("old selection of the recreated path is rejected", act(rcOld, print: true, share: false, recRc) == .changed && recRc.prints.isEmpty)
+m.removePhoto(at: rc, generation: gE, observedAt: m.nextSequence())
+let replacement = PhotoModel(url: rc, sequence: m.nextSequence())!
+m.publish(replacement, generation: gE); spin(0.3)
+check("delayed stale removal cannot remove a newer replacement", row(m, "rc.png").map { $0.sequence >= replacement.sequence } == true)
+
+// Absence observed (sequence taken) before the check result is acted on; the path is recreated and ingested meanwhile
+let rr = Ev.appendingPathComponent("rr.png"); png(rr, color: .red)
+m.processNewFile(at: rr, generation: gE); waitUntil(3) { row(m, "rr.png") != nil }
+try! FileManager.default.removeItem(at: rr)
+let lateObservation = m.nextSequence()
+png(rr, color: .blue)
+m.processNewFile(at: rr, generation: gE); waitUntil(3) { row(m, "rr.png").map(tint) == "blue" }
+m.removePhoto(at: rr, generation: gE, observedAt: lateObservation); spin(0.3)
+check("late absence observation cannot remove a recreated photo that exists", row(m, "rr.png").map(tint) == "blue")
+let rrSeq = row(m, "rr.png")?.sequence ?? Int.max
+m.publish(PhotoModel(url: rr, sequence: m.nextSequence())!, generation: gE)
+check("and later arrivals of that path are still accepted", (row(m, "rr.png")?.sequence ?? 0) > rrSeq)
+
+// Old-folder callbacks after a switch
+try! FileManager.default.removeItem(at: rc)
+m.setWatchedFolder(N); spin(0.5)
+m.reconcile(rc, generation: gE); m.reconcile(Ev.appendingPathComponent("moved.png"), generation: gE); spin(0.5)
+check("old-folder removal and arrival callbacks do not touch the new folder", names(m) == ["n.png"])
+
+// Live FSEvents: no manual ingestion
+let Lv = folder("Lv"); let lp = Lv.appendingPathComponent("live.png")
+m.setWatchedFolder(Lv); spin(1.0)
+png(lp); waitUntil(6) { row(m, "live.png") != nil }
+check("live: created file appears automatically", row(m, "live.png") != nil)
+let lrow = row(m, "live.png")
+spin(1.0); try? FileManager.default.removeItem(at: lp); waitUntil(6) { row(m, "live.png") == nil }
+check("live: deleted file leaves automatically", row(m, "live.png") == nil)
+spin(1.0); png(lp, color: .blue); waitUntil(6) { row(m, "live.png") != nil }
+check("live: recreated file appears with new content", row(m, "live.png").map(tint) == "blue" && row(m, "live.png")?.id != lrow?.id)
+let LvX = folder("LvX"); let lq = LvX.appendingPathComponent("mv.png"); png(lq)
+spin(1.0); try? FileManager.default.moveItem(at: lq, to: Lv.appendingPathComponent("mv.png")); waitUntil(6) { row(m, "mv.png") != nil }
+check("live: rename into folder appears automatically", row(m, "mv.png") != nil)
+spin(1.0); try? FileManager.default.moveItem(at: Lv.appendingPathComponent("mv.png"), to: lq); waitUntil(6) { row(m, "mv.png") == nil }
+check("live: rename out of folder leaves automatically", row(m, "mv.png") == nil)
+spin(1.0); try? FileManager.default.moveItem(at: lp, to: Lv.appendingPathComponent("renamed.png")); waitUntil(6) { row(m, "renamed.png") != nil && row(m, "live.png") == nil }
+check("live: rename within folder swaps rows automatically", row(m, "renamed.png") != nil && row(m, "live.png") == nil)
+for d in [Ev, Lv, LvX] { try? FileManager.default.removeItem(at: d) }
 
 for d in [I, J, Kd, Oo, Wm, Fo] { try? FileManager.default.removeItem(at: d) }
 

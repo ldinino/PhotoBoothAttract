@@ -163,6 +163,32 @@ Live removal and rename tests were attempted but blocked by standalone event del
 Deleted or moved-out files stop being actionable. Repeated events remain idempotent.
 Verify actual FSEvents with synthetic files; preserve incomplete-write handling.
 
+**Implementation (branch `fix/core-004-filesystem-events`):** the callback now reconciles on
+create, modify, rename and remove flags (directories ignored) and decides arrival or departure
+from the file's current state. The observation sequence is taken before the filesystem check, so a
+late absence result cannot outrank a newer arrival. Removal records a per-path tombstone in `FolderLifecycle`;
+reads, retries and queued publications that started before it are rejected, and a removal only
+drops rows older than itself, so recreation and replacements survive.
+
+**Automated:** `bash scripts/check-folder-lifecycle.sh` passes 77 assertions (the previous 54 plus
+23: flags, delete, rename in/out/within, repeated removal, incomplete arrival, removal during a
+pending read, deletion before queued publication, same-path recreation, delayed stale removal,
+old-folder callbacks, late absence observation after recreation, action rejection on stub sinks).
+Negative controls: `LIFECYCLE_MUTANT=events` (3 FAILED), `tombstone` (3), `wrongremove` (3),
+`lateabsence` (2); correct code restored and rerun.
+
+**Live FSEvents:** the same harness uses the real watcher on synthetic folders with no manual
+ingestion: create, delete, recreate, rename into, out of and within the folder were all observed
+automatically.
+
+**Build:** the Debug `xcodebuild` command from the brief succeeded.
+
+**UI:** not performed (no isolated-preferences app launch). **Hardware:** not performed; older
+Intel Macs unverified. The overall core acceptance gate stays open.
+
+**Cleanup:** temporary harness folders removed. `icon.icns` and `icon.png` were committed to this
+branch by the maintainer (527eeb0), not by this task; left untouched.
+
 ## CORE-005: Clear-Folder Failure Reporting
 
 **Owner:** [PhotoManager.swift](../PhotoBoothAttract/PhotoManager.swift#L142).

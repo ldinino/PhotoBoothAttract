@@ -23,13 +23,25 @@ nonisolated struct FolderLifecycle {
     private(set) var generation = 0
     private var claims: [URL: Int] = [:]
     private var changedWhileClaimed: Set<URL> = []
+    private var removedAt: [URL: Int] = [:]
     private var lastSequence = 0
 
     mutating func begin() -> Int {
         generation += 1
         claims.removeAll()
         changedWhileClaimed.removeAll()
+        removedAt.removeAll()
         return generation
+    }
+
+    /// Records a removal observed at `sequence`; reads that started before it are stale.
+    mutating func invalidate(_ url: URL, sequence: Int, generation: Int) {
+        guard isCurrent(generation) else { return }
+        removedAt[url] = max(removedAt[url] ?? 0, sequence)
+    }
+
+    func accepts(_ url: URL, sequence: Int, generation: Int) -> Bool {
+        isCurrent(generation) && sequence > (removedAt[url] ?? 0)
     }
 
     mutating func nextSequence() -> Int {
@@ -301,9 +313,12 @@ class PhotoManager: ObservableObject {
             return
         }
         
-        let sequence = processingQueue.sync { lifecycle.nextSequence() }
+        let sequence = nextSequence()
         guard let photo = PhotoModel(url: url, sequence: sequence) else {
-            if retries < 5 {
+            if !Self.isRegularFile(url) {
+                removePhoto(at: url, generation: generation, observedAt: sequence)
+                removeFromProcessing(url, generation: generation)
+            } else if retries < 5 {
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
                     self.processNewFile(at: url, generation: generation, retries: retries + 1)
                 }
@@ -323,7 +338,7 @@ class PhotoManager: ObservableObject {
 
     /// One row per URL. A changed revision replaces the row; an unchanged or older one is ignored.
     func publish(_ photo: PhotoModel, generation: Int) {
-        guard isCurrent(generation) else { return }
+        guard processingQueue.sync(execute: { lifecycle.accepts(photo.url, sequence: photo.sequence, generation: generation) }) else { return }
         if let index = photos.firstIndex(where: { $0.url == photo.url }) {
             let current = photos[index]
             guard photo.sequence > current.sequence else { return }
@@ -338,6 +353,46 @@ class PhotoManager: ObservableObject {
         photos.sort { $0.timestamp > $1.timestamp }
     }
     
+    static func isRegularFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
+    }
+
+    /// Create, modify, rename and remove flags can coalesce, so the file's current state decides.
+    static func isRelevant(flags: UInt32) -> Bool {
+        let wanted = kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemModified
+            | kFSEventStreamEventFlagItemRenamed | kFSEventStreamEventFlagItemRemoved
+        return flags & UInt32(wanted) != 0 && flags & UInt32(kFSEventStreamEventFlagItemIsDir) == 0
+    }
+
+    func nextSequence() -> Int {
+        processingQueue.sync { lifecycle.nextSequence() }
+    }
+
+    /// The observation sequence is taken before the filesystem check so a late absence result cannot outrank newer work.
+    func reconcile(_ url: URL, generation: Int) {
+        guard Self.allowedExtensions.contains(url.pathExtension.lowercased()) else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let observedAt = self.nextSequence()
+            if Self.isRegularFile(url) {
+                self.processNewFile(at: url, generation: generation)
+            } else {
+                self.removePhoto(at: url, generation: generation, observedAt: observedAt)
+            }
+        }
+    }
+
+    func removePhoto(at url: URL, generation: Int, observedAt sequence: Int) {
+        let current = processingQueue.sync { () -> Bool in
+            lifecycle.invalidate(url, sequence: sequence, generation: generation)
+            return lifecycle.isCurrent(generation)
+        }
+        guard current else { return }
+        DispatchQueue.main.async {
+            guard self.isCurrent(generation) else { return }
+            self.photos.removeAll { $0.url == url && $0.sequence < sequence }
+        }
+    }
+
     func removeFromProcessing(_ url: URL, generation: Int) {
         processingQueue.async {
             if self.lifecycle.release(url, generation: generation) {
@@ -370,13 +425,8 @@ class PhotoManager: ObservableObject {
             guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else { return }
             
             for i in 0..<numEvents {
-                let url = URL(fileURLWithPath: paths[i])
-                let flags = eventFlags[i]
-                
-                // Trigger only on new file creations or modifications
-                let isCreatedOrModified = (flags & UInt32(kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemModified)) != 0
-                if isCreatedOrModified {
-                    manager.processNewFile(at: url, generation: info.generation)
+                if PhotoManager.isRelevant(flags: eventFlags[i]) {
+                    manager.reconcile(URL(fileURLWithPath: paths[i]), generation: info.generation)
                 }
             }
         }
