@@ -34,12 +34,10 @@ nonisolated struct FolderLifecycle {
         return generation
     }
 
-    /// Records a removal; reads that started before the returned sequence are stale.
-    mutating func invalidate(_ url: URL, generation: Int) -> Int? {
-        guard isCurrent(generation) else { return nil }
-        let sequence = nextSequence()
-        removedAt[url] = sequence
-        return sequence
+    /// Records a removal observed at `sequence`; reads that started before it are stale.
+    mutating func invalidate(_ url: URL, sequence: Int, generation: Int) {
+        guard isCurrent(generation) else { return }
+        removedAt[url] = max(removedAt[url] ?? 0, sequence)
     }
 
     func accepts(_ url: URL, sequence: Int, generation: Int) -> Bool {
@@ -315,10 +313,10 @@ class PhotoManager: ObservableObject {
             return
         }
         
-        let sequence = processingQueue.sync { lifecycle.nextSequence() }
+        let sequence = nextSequence()
         guard let photo = PhotoModel(url: url, sequence: sequence) else {
             if !Self.isRegularFile(url) {
-                removePhoto(at: url, generation: generation)
+                removePhoto(at: url, generation: generation, observedAt: sequence)
                 removeFromProcessing(url, generation: generation)
             } else if retries < 5 {
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
@@ -366,19 +364,29 @@ class PhotoManager: ObservableObject {
         return flags & UInt32(wanted) != 0 && flags & UInt32(kFSEventStreamEventFlagItemIsDir) == 0
     }
 
+    func nextSequence() -> Int {
+        processingQueue.sync { lifecycle.nextSequence() }
+    }
+
+    /// The observation sequence is taken before the filesystem check so a late absence result cannot outrank newer work.
     func reconcile(_ url: URL, generation: Int) {
         guard Self.allowedExtensions.contains(url.pathExtension.lowercased()) else { return }
         DispatchQueue.global(qos: .userInitiated).async {
+            let observedAt = self.nextSequence()
             if Self.isRegularFile(url) {
                 self.processNewFile(at: url, generation: generation)
             } else {
-                self.removePhoto(at: url, generation: generation)
+                self.removePhoto(at: url, generation: generation, observedAt: observedAt)
             }
         }
     }
 
-    func removePhoto(at url: URL, generation: Int) {
-        guard let sequence = processingQueue.sync(execute: { lifecycle.invalidate(url, generation: generation) }) else { return }
+    func removePhoto(at url: URL, generation: Int, observedAt sequence: Int) {
+        let current = processingQueue.sync { () -> Bool in
+            lifecycle.invalidate(url, sequence: sequence, generation: generation)
+            return lifecycle.isCurrent(generation)
+        }
+        guard current else { return }
         DispatchQueue.main.async {
             guard self.isCurrent(generation) else { return }
             self.photos.removeAll { $0.url == url && $0.sequence < sequence }

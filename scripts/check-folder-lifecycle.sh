@@ -3,7 +3,7 @@
 # MessageManager with a logging stub, so no app log, printer or Messages is touched. Actions run
 # against stub sinks. Synthetic images only, in disposable temp folders.
 # LIFECYCLE_MUTANT=release|current|clear breaks FolderLifecycle on purpose; the checks must then fail.
-# LIFECYCLE_MUTANT=events|tombstone|wrongremove: ignore rename/remove flags | no stale-read tombstone | removal
+# LIFECYCLE_MUTANT=events|tombstone|wrongremove|lateabsence: ignore rename/remove flags | no stale-read tombstone | removal
 # also drops a newer replacement.
 # LIFECYCLE_MUTANT=url|stale|watermark|mainread: URL-only identity | older revision wins | unchanged reads
 # do not advance ordering | verification reads on the main thread.
@@ -19,6 +19,7 @@ case "${LIFECYCLE_MUTANT:-}" in
     events) sed -i '' 's/flags \& UInt32(wanted) != 0/flags \& UInt32(kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemModified) != 0/' "$WORK/PhotoManager.swift" ;;
     tombstone) sed -i '' 's/sequence > (removedAt\[url\] ?? 0)/true/' "$WORK/PhotoManager.swift" ;;
     wrongremove) sed -i '' 's/\$0.url == url \&\& \$0.sequence < sequence/$0.url == url/' "$WORK/PhotoManager.swift" ;;
+    lateabsence) sed -i '' 's/func removePhoto(at url: URL, generation: Int, observedAt sequence: Int) {/&\n        let sequence = nextSequence()/' "$WORK/PhotoManager.swift" ;;
     release) sed -i '' 's/guard claims\[url\] == generation else { return false }/guard true else { return false }/' "$WORK/PhotoManager.swift" ;;
     url) sed -i '' 's/photo.digest == current.digest/true/' "$WORK/PhotoManager.swift" ;;
     stale) sed -i '' 's/guard photo.sequence > current.sequence else { return }//' "$WORK/PhotoManager.swift" ;;
@@ -381,9 +382,9 @@ check("incomplete arrival is listed once completed", row(m, "inc.png") != nil)
 
 // Removal during a pending read: the read must not resurrect the row
 let pend = X.appendingPathComponent("pend.png"); png(pend)
-let staleRead = PhotoModel(url: pend, sequence: m.processingQueue.sync { m.lifecycle.nextSequence() })!
+let staleRead = PhotoModel(url: pend, sequence: m.nextSequence())!
 try! FileManager.default.removeItem(at: pend)
-m.removePhoto(at: pend, generation: gE); spin(0.3)
+m.removePhoto(at: pend, generation: gE, observedAt: m.nextSequence()); spin(0.3)
 m.publish(staleRead, generation: gE)
 check("read started before a removal cannot publish after it", row(m, "pend.png") == nil)
 
@@ -391,9 +392,9 @@ check("read started before a removal cannot publish after it", row(m, "pend.png"
 let rc = Ev.appendingPathComponent("rc.png"); png(rc, color: .red)
 m.processNewFile(at: rc, generation: gE); waitUntil(3) { row(m, "rc.png") != nil }
 let rcOld = row(m, "rc.png")!
-let queued = PhotoModel(url: rc, sequence: m.processingQueue.sync { m.lifecycle.nextSequence() })!
+let queued = PhotoModel(url: rc, sequence: m.nextSequence())!
 try! FileManager.default.removeItem(at: rc)
-m.removePhoto(at: rc, generation: gE); waitUntil(3) { row(m, "rc.png") == nil }
+m.removePhoto(at: rc, generation: gE, observedAt: m.nextSequence()); waitUntil(3) { row(m, "rc.png") == nil }
 m.publish(queued, generation: gE)
 check("publication queued before deletion does not resurrect the row", row(m, "rc.png") == nil)
 png(rc, color: .blue)
@@ -401,10 +402,23 @@ m.reconcile(rc, generation: gE); waitUntil(3) { row(m, "rc.png") != nil }
 check("same-path recreation is listed as a new row", row(m, "rc.png").map(tint) == "blue" && row(m, "rc.png")!.id != rcOld.id)
 let recRc = Rec()
 check("old selection of the recreated path is rejected", act(rcOld, print: true, share: false, recRc) == .changed && recRc.prints.isEmpty)
-m.removePhoto(at: rc, generation: gE)
-let replacement = PhotoModel(url: rc, sequence: m.processingQueue.sync { m.lifecycle.nextSequence() })!
+m.removePhoto(at: rc, generation: gE, observedAt: m.nextSequence())
+let replacement = PhotoModel(url: rc, sequence: m.nextSequence())!
 m.publish(replacement, generation: gE); spin(0.3)
-check("delayed stale removal cannot remove a newer replacement", row(m, "rc.png")?.sequence == replacement.sequence)
+check("delayed stale removal cannot remove a newer replacement", row(m, "rc.png").map { $0.sequence >= replacement.sequence } == true)
+
+// Absence observed (sequence taken) before the check result is acted on; the path is recreated and ingested meanwhile
+let rr = Ev.appendingPathComponent("rr.png"); png(rr, color: .red)
+m.processNewFile(at: rr, generation: gE); waitUntil(3) { row(m, "rr.png") != nil }
+try! FileManager.default.removeItem(at: rr)
+let lateObservation = m.nextSequence()
+png(rr, color: .blue)
+m.processNewFile(at: rr, generation: gE); waitUntil(3) { row(m, "rr.png").map(tint) == "blue" }
+m.removePhoto(at: rr, generation: gE, observedAt: lateObservation); spin(0.3)
+check("late absence observation cannot remove a recreated photo that exists", row(m, "rr.png").map(tint) == "blue")
+let rrSeq = row(m, "rr.png")?.sequence ?? Int.max
+m.publish(PhotoModel(url: rr, sequence: m.nextSequence())!, generation: gE)
+check("and later arrivals of that path are still accepted", (row(m, "rr.png")?.sequence ?? 0) > rrSeq)
 
 // Old-folder callbacks after a switch
 try! FileManager.default.removeItem(at: rc)
