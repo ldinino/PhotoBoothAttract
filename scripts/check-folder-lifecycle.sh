@@ -1,7 +1,7 @@
 #!/bin/bash
 # CORE-001 regression checks. Compiles the real PhotoManager/PhotoModel with a logging stub,
 # so no app log or live folder is touched. Synthetic images only, in disposable temp folders.
-# LIFECYCLE_MUTANT=release|current breaks FolderLifecycle on purpose; the checks must then fail.
+# LIFECYCLE_MUTANT=release|current|clear breaks FolderLifecycle on purpose; the checks must then fail.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")/../PhotoBoothAttract" && pwd)"
@@ -13,6 +13,7 @@ sed -E 's/private (func|var|let)/\1/' "$SRC/PhotoManager.swift" > "$WORK/PhotoMa
 case "${LIFECYCLE_MUTANT:-}" in
     release) sed -i '' 's/if claims\[url\] == generation { claims\[url\] = nil }/claims[url] = nil/' "$WORK/PhotoManager.swift" ;;
     current) sed -i '' 's/generation == self.generation/true/' "$WORK/PhotoManager.swift" ;;
+    clear) sed -i '' 's/let generation = processingQueue.sync { lifecycle.begin() }/let generation = self.generation/' "$WORK/PhotoManager.swift" ;;
 esac
 cp "$SRC/PhotoModel.swift" "$WORK/"
 echo 'final class ErrorLog { static let shared = ErrorLog(); func log(_ m: String) {} }' > "$WORK/ErrorLog.swift"
@@ -133,6 +134,34 @@ m.clearWatchedFolder { if case .success(let n) = $0 { clearedD = n } }
 waitUntil(5) { clearedD >= 0 }
 check("clear of the current folder still empties it", clearedD == 1 && m.photos.isEmpty && !m.isClearing)
 
+// Reads started before a same-folder clear (kept outside the folder so they survive the delete)
+let K = folder("K"), X = folder("X")
+png(K.appendingPathComponent("k.png"))
+m.setWatchedFolder(K); spin(0.5)
+let preClear = m.generation
+let kept = X.appendingPathComponent("kept.png"); png(kept)
+let paused = X.appendingPathComponent("paused.png"); try! Data([1, 2, 3, 4, 5, 6, 7, 8, 9]).write(to: paused)
+m.processNewFile(at: paused, generation: preClear)
+var clearedK = -1
+m.clearWatchedFolder { if case .success(let n) = $0 { clearedK = n } }
+waitUntil(5) { clearedK >= 0 }
+check("same-folder clear empties the folder", clearedK == 1 && m.photos.isEmpty)
+m.processNewFile(at: kept, generation: preClear); spin(0.5)
+check("read paused before clear cannot republish after it", m.photos.isEmpty)
+png(paused); spin(1.5)
+check("retry pending before clear cannot publish after it", m.photos.isEmpty)
+let postClear = K.appendingPathComponent("post.png"); png(postClear)
+m.processNewFile(at: postClear, generation: m.generation); spin(0.5)
+check("arrival after clear is published", names(m) == ["post.png"])
+var clearedEmpty = -1
+let K2 = folder("K2")
+m.setWatchedFolder(K2); spin(0.3)
+let preEmpty = m.generation
+m.clearWatchedFolder { if case .success(let n) = $0 { clearedEmpty = n } }
+waitUntil(5) { clearedEmpty >= 0 }
+m.processNewFile(at: kept, generation: preEmpty); spin(0.5)
+check("read before clear of an empty folder is rejected", clearedEmpty == 0 && m.photos.isEmpty)
+
 // Ordering, dedup, captured selection
 let O = folder("O"), N = folder("N")
 let now = Date()
@@ -151,7 +180,7 @@ check("new arrival is first and captured selection is unchanged", names(m).first
 m.setWatchedFolder(N); spin(0.5)
 check("captured selection still points at its own photo after a switch", captured.url.lastPathComponent == "new.png" && names(m) == ["n.png"])
 
-for d in [A, B, E, P, Q, R, S, F, C, D, O, N] { try? FileManager.default.removeItem(at: d) }
+for d in [A, B, E, P, Q, R, S, F, C, D, O, N, K, K2, X] { try? FileManager.default.removeItem(at: d) }
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
 EOF

@@ -199,7 +199,6 @@ class PhotoManager: ObservableObject {
             completion(.failure(.noFolder))
             return
         }
-        let generation = self.generation
         let result = listDeletablePhotoURLs()
         switch result {
         case .failure(let error):
@@ -207,6 +206,9 @@ class PhotoManager: ObservableObject {
             return
         case .success(let urlsToDelete):
             let folderPath = watchedFolderURL!.standardized.path
+            stopWatching()
+            let generation = processingQueue.sync { lifecycle.begin() }
+            startWatching(watchedFolderURL!, generation: generation)
             if urlsToDelete.isEmpty {
                 ErrorLog.shared.log("Clear folder triggered: folder is empty (\(folderPath))")
                 DispatchQueue.main.async {
