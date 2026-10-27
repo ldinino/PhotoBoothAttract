@@ -163,6 +163,30 @@ Live removal and rename tests were attempted but blocked by standalone event del
 Deleted or moved-out files stop being actionable. Repeated events remain idempotent.
 Verify actual FSEvents with synthetic files; preserve incomplete-write handling.
 
+**Implementation (branch `fix/core-004-filesystem-events`):** the callback now reconciles on
+create, modify, rename and remove flags (directories ignored) and decides arrival or departure
+from the file's current state. Removal records a per-path tombstone sequence in `FolderLifecycle`;
+reads, retries and queued publications that started before it are rejected, and a removal only
+drops rows older than itself, so recreation and replacements survive.
+
+**Automated:** `bash scripts/check-folder-lifecycle.sh` passes 74 assertions (the previous 54 plus
+20: flags, delete, rename in/out/within, repeated removal, incomplete arrival, removal during a
+pending read, deletion before queued publication, same-path recreation, delayed stale removal,
+old-folder callbacks, action rejection on stub sinks). Negative controls: `LIFECYCLE_MUTANT=events`
+(4 FAILED), `tombstone` (3 FAILED), `wrongremove` (1 FAILED); correct code restored and rerun.
+
+**Live FSEvents:** the same harness uses the real watcher on synthetic folders with no manual
+ingestion: create, delete, recreate, rename into, out of and within the folder were all observed
+automatically.
+
+**Build:** the Debug `xcodebuild` command from the brief succeeded.
+
+**UI:** not performed (no isolated-preferences app launch). **Hardware:** not performed; older
+Intel Macs unverified. The overall core acceptance gate stays open.
+
+**Cleanup:** temporary harness folders removed; pre-existing untracked `icon.icns` and
+`icon.png` left untouched.
+
 ## CORE-005: Clear-Folder Failure Reporting
 
 **Owner:** [PhotoManager.swift](../PhotoBoothAttract/PhotoManager.swift#L142).
