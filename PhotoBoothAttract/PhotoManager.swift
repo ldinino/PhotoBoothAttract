@@ -15,7 +15,8 @@ enum ClearFolderError: Error {
     case noFolder
     case folderNotSafe
     case enumerationFailed(Error)
-    case deleteFailed(URL, Error)
+    /// Some or all captured files survived; `first` is the first failure's error.
+    case deleteFailed(deleted: Int, failed: Int, first: Error)
 }
 
 /// Each folder selection or refresh starts a new generation; work tagged with an older one is stale.
@@ -225,24 +226,37 @@ class PhotoManager: ObservableObject {
             ErrorLog.shared.log("Clear folder triggered: deleting \(urlsToDelete.count) photo(s) in \(folderPath)")
             isClearing = true
             DispatchQueue.global(qos: .userInitiated).async {
-                var deletedCount = 0
+                var deletedCount = 0, failedCount = 0
+                var firstError: Error?
                 for url in urlsToDelete {
                     do {
                         try FileManager.default.removeItem(at: url)
                         deletedCount += 1
                     } catch {
-                        ErrorLog.shared.log("Clear folder: failed to delete \(url.lastPathComponent): \(error)")
+                        if Self.fileExists(url) {
+                            failedCount += 1
+                            firstError = firstError ?? error
+                            ErrorLog.shared.log("Clear folder: failed to delete \(url.lastPathComponent): \(error)")
+                            self.reconcile(url, generation: generation)
+                            continue
+                        }
                     }
+                    self.removePhoto(at: url, generation: generation, observedAt: self.nextSequence())
                 }
                 DispatchQueue.main.async {
-                    if self.isCurrent(generation) {
-                        self.isClearing = false
-                        self.photos.removeAll()
+                    if self.isCurrent(generation) { self.isClearing = false }
+                    if let firstError {
+                        completion(.failure(.deleteFailed(deleted: deletedCount, failed: failedCount, first: firstError)))
+                    } else {
+                        completion(.success(deletedCount))
                     }
-                    completion(.success(deletedCount))
                 }
             }
         }
+    }
+
+    private static func fileExists(_ url: URL) -> Bool {
+        (try? url.checkResourceIsReachable()) == true
     }
 
     /// Lists direct children of the watched folder that are regular files with allowed image extensions. Fails if no folder or path is unsafe (root or home).
