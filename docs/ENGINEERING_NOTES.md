@@ -151,6 +151,16 @@ the first URL. Actual Messages attachment timing was not tested.
 for repeated source filenames. Preparing a later draft cannot change an earlier
 attachment. Clean up copies only after consumers no longer need them; never delete originals.
 
+**Status: fixed on `fix/core-003-attachment-isolation`; PR pending audit.** Each share request
+writes into its own `PhotoBoothAttract-messages/<UUID>/` temp directory, used by both the
+compressed copy and the unchanged-bytes fallback. Only a directory whose attachment was never
+handed off (write failure, Messages service unavailable) is removed. Handed-off files are not
+deleted; the system temp cleanup reclaims them (retention lifetime unverified).
+`scripts/check-folder-lifecycle.sh` covers distinct URLs, unchanged earlier bytes, fallback
+isolation, originals untouched and scoped cleanup; `LIFECYCLE_MUTANT=attachment` fails 6 checks.
+Debug build succeeds. Pending (final CORE hardware pass): Messages drafts A then B with the same
+filename keep their own images on Intel and Apple Silicon, with and without recipient.
+
 ## CORE-004: Filesystem Event Coverage
 
 **Owner:** [PhotoManager.swift](../PhotoBoothAttract/PhotoManager.swift#L293).

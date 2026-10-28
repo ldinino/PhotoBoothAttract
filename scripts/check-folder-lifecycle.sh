@@ -10,6 +10,7 @@
 # LIFECYCLE_MUTANT=mainscan|nostop|stalebusy: initial scan on main | stale scan keeps preparing files | stale
 # scan completion ends the new busy state.
 # LIFECYCLE_MUTANT=clearaccess|clearempty: access errors count as gone | empty clear wipes the list.
+# LIFECYCLE_MUTANT=attachment: CORE-003 attachments share the temp directory (deterministic paths).
 # LIFECYCLE_MUTANT=clearsuccess|clearhide: CORE-005 clear always reports success | failed deletions lose their rows.
 set -euo pipefail
 
@@ -38,7 +39,11 @@ case "${LIFECYCLE_MUTANT:-}" in
     clearhide) sed -i '' '/^ *continue$/d' "$WORK/PhotoManager.swift" ;;
     clear) sed -i '' 's/let generation = processingQueue.sync { lifecycle.begin() }/let generation = self.generation/' "$WORK/PhotoManager.swift" ;;
 esac
-cp "$SRC/PhotoModel.swift" "$SRC/PrintManager.swift" "$SRC/MessageManager.swift" "$WORK/"
+cp "$SRC/PhotoModel.swift" "$SRC/PrintManager.swift" "$WORK/"
+sed -E 's/private (func|var|let)/\1/' "$SRC/MessageManager.swift" > "$WORK/MessageManager.swift"
+case "${LIFECYCLE_MUTANT:-}" in
+    attachment) sed -i '' '/PhotoBoothAttract-messages/d; /UUID().uuidString, isDirectory: true)/d' "$WORK/MessageManager.swift" ;;
+esac
 case "${LIFECYCLE_MUTANT:-}" in
     url) sed -i '' 's/SHA256.hash(data: data) == digest ? /true ? /' "$WORK/PhotoModel.swift" ;;
     mainread) sed -i '' 's/DispatchQueue.global(qos: .userInitiated).async {/DispatchQueue.main.async {/' "$WORK/PhotoModel.swift" ;;
@@ -649,6 +654,40 @@ for d in [G, H, S1, S2, T, U] { try? FileManager.default.removeItem(at: d) }
 for d in [I, J, Kd, Oo, Wm, Fo] { try? FileManager.default.removeItem(at: d) }
 
 for d in [A, B, E, P, Q, R, S, F, C, D, O, N, K, K2, X] { try? FileManager.default.removeItem(at: d) }
+// CORE-003: each share request owns its attachment directory
+func bigJPEG(_ color: NSColor) -> Data {
+    let img = NSImage(size: NSSize(width: 64, height: 64))
+    img.lockFocus(); color.setFill(); NSRect(x: 0, y: 0, width: 64, height: 64).fill(); img.unlockFocus()
+    return NSBitmapImageRep(data: img.tiffRepresentation!)!.representation(using: .png, properties: [:])!
+}
+let atmm = MessageManager.shared
+let atfm = FileManager.default
+let imgA = bigJPEG(.red), imgB = bigJPEG(.blue)
+let junkA = Data("not an image A".utf8), junkB = Data("not an image B".utf8)
+let ata1 = atmm.attachmentURL(for: imgA, name: "IMG_1.png")!
+let aBytes = try! Data(contentsOf: ata1)
+let atb1 = atmm.attachmentURL(for: imgB, name: "IMG_1.png")!
+let ata2 = atmm.attachmentURL(for: imgA, name: "IMG_1.png")!
+check("attachments: same basename, different images get distinct URLs", ata1 != atb1 && ata1.deletingLastPathComponent() != atb1.deletingLastPathComponent())
+check("attachments: preparing B leaves A's bytes unchanged", (try? Data(contentsOf: ata1)) == aBytes && (try? Data(contentsOf: atb1)) != aBytes)
+check("attachments: repeated requests for A get distinct URLs", ata1 != ata2)
+let atf1 = atmm.attachmentURL(for: junkA, name: "IMG_1.png")!
+let atf2 = atmm.attachmentURL(for: junkB, name: "IMG_1.png")!
+let atc3 = atmm.attachmentURL(for: imgB, name: "IMG_1.png")!
+check("attachments: fallback keeps exact bytes and stays isolated", (try? Data(contentsOf: atf1)) == junkA && (try? Data(contentsOf: atf2)) == junkB && atf1 != atf2 && atf1 != atc3)
+check("attachments: compressed and fallback requests do not collide", Set([ata1, atb1, ata2, atf1, atf2, atc3].map { $0.path }).count == 6 && (try? Data(contentsOf: ata1)) == aBytes)
+let srcDir = folder("attsrc"); let srcFile = srcDir.appendingPathComponent("IMG_1.png"); png(srcFile)
+let srcBytes = try! Data(contentsOf: srcFile)
+let fromSrc = atmm.attachmentURL(for: srcBytes, name: srcFile.lastPathComponent)!
+check("attachments: original is untouched and the copy is outside its folder", (try? Data(contentsOf: srcFile)) == srcBytes && fromSrc.deletingLastPathComponent().deletingLastPathComponent() != srcDir)
+let atkeep = fromSrc.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("atkeep-sentinel")
+try! Data("x".utf8).write(to: atkeep)
+atmm.removeRequestDirectory(of: fromSrc)
+check("attachments: cleanup removes only the request directory", !atfm.fileExists(atPath: fromSrc.deletingLastPathComponent().path) && atfm.fileExists(atPath: atkeep.path) && atfm.fileExists(atPath: ata1.path) && atfm.fileExists(atPath: srcFile.path))
+try? atfm.removeItem(at: atkeep)
+for u in [ata1, atb1, ata2, atf1, atf2, atc3] { try? atfm.removeItem(at: u.deletingLastPathComponent()) }
+try? atfm.removeItem(at: srcDir)
+
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
 EOF
