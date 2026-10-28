@@ -73,7 +73,7 @@ automated UI inspection.
 performance/compatibility is not established by this report. Printing and Messages were not part
 of these checks. The overall core acceptance gate remains open.
 
-**Remaining gap:** after a clear, arrivals that land while deletion is in progress are removed from the list at completion even if their files remain (CORE-005 territory).
+**Remaining gap:** closed by CORE-005 below.
 
 ## CORE-002: Preview and Action Identity
 
@@ -225,6 +225,20 @@ photo array while the image remained on disk.
 **Acceptance:** Report failed or partial clears accurately and reconcile surviving
 files instead of hiding them. Cover empty folders, denied deletions and folder changes
 during a clear. Destructive checks must use disposable fixtures, never an event folder.
+
+**Status: fixed on `fix/core-005-clear-failures` (PR pending audit).** `clearWatchedFolder` now returns
+`.failure(.deleteFailed(deleted:failed:first:))` when any captured file survives (total denial: 0 deleted;
+partial: "Folder partly cleared"). Only deleted or already-vanished files lose rows; survivors are re-read
+through `reconcile`, arrivals outside the captured list are untouched, and busy state is reset only for the
+current generation. Only a confirmed ENOENT counts as gone; access errors stay failures. An empty-folder clear no longer resets the list.
+
+**Verified:** `check-folder-lifecycle.sh` passes (empty, total denial, mixed, survivor re-listing, arrival and
+vanished file during deletion, failure after a folder switch; main-thread completion). Mutants
+`clearsuccess`, `clearaccess`, `clearempty` and `clearhide` fail 5, 7, 1 and 1 checks. Debug build succeeds. Denial uses the immutable flag on
+synthetic files, not a read-only directory.
+
+**Not verified:** the confirmation and result alerts were not inspected in a running app; Intel/TV event Mac
+clear behavior needs fresh device evidence. Stale-completion busy state has no dedicated mutant.
 
 ## CORE-006: Initial Scan Blocks the UI
 

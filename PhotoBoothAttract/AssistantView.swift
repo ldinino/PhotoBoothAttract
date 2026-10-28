@@ -238,12 +238,17 @@ struct AssistantView: View {
                 clearResultMessage = "Deleted \(count) photo\(count == 1 ? "" : "s")."
                 showClearResultAlert = true
             case .failure(let error):
-                clearResultTitle = "Clear folder failed"
+                clearResultTitle = isPartial(error) ? "Folder partly cleared" : "Clear folder failed"
                 clearResultMessage = message(for: error)
                 ErrorLog.shared.log("Clear folder: \(clearResultMessage)")
                 showClearResultAlert = true
             }
         }
+    }
+
+    private func isPartial(_ error: ClearFolderError) -> Bool {
+        if case .deleteFailed(let deleted, _, _) = error { return deleted > 0 }
+        return false
     }
 
     private func message(for error: ClearFolderError) -> String {
@@ -254,8 +259,8 @@ struct AssistantView: View {
             return "This folder cannot be cleared for safety (root or home directory)."
         case .enumerationFailed(let underlying):
             return "Could not list folder contents: \(underlying.localizedDescription)"
-        case .deleteFailed(let url, let underlying):
-            return "Failed to delete \(url.lastPathComponent): \(underlying.localizedDescription)"
+        case .deleteFailed(let deleted, let failed, let underlying):
+            return "Deleted \(deleted), but \(failed) photo\(failed == 1 ? "" : "s") could not be deleted and remain in the folder. First error: \(underlying.localizedDescription)"
         }
     }
 }

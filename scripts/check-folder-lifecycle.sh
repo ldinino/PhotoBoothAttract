@@ -9,6 +9,8 @@
 # do not advance ordering | verification reads on the main thread.
 # LIFECYCLE_MUTANT=mainscan|nostop|stalebusy: initial scan on main | stale scan keeps preparing files | stale
 # scan completion ends the new busy state.
+# LIFECYCLE_MUTANT=clearaccess|clearempty: access errors count as gone | empty clear wipes the list.
+# LIFECYCLE_MUTANT=clearsuccess|clearhide: CORE-005 clear always reports success | failed deletions lose their rows.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")/../PhotoBoothAttract" && pwd)"
@@ -30,6 +32,10 @@ case "${LIFECYCLE_MUTANT:-}" in
     mainscan) sed -i '' '/func scanExistingFiles/,/^    }$/ s/DispatchQueue.global(qos: .userInitiated).async/DispatchQueue.main.async/' "$WORK/PhotoManager.swift" ;;
     nostop) sed -i '' '/guard self.isCurrent(generation) else { break }/d' "$WORK/PhotoManager.swift" ;;
     stalebusy) sed -i '' 's/if self.isCurrent(generation) { self.isRefreshing = false }/self.isRefreshing = false/' "$WORK/PhotoManager.swift" ;;
+    clearaccess) sed -i '' 's/lstat(url.path, \&info) != 0 \&\& errno == ENOENT/true/' "$WORK/PhotoManager.swift" ;;
+    clearempty) sed -i '' 's/                    completion(.success(0))/                    self.photos.removeAll(); completion(.success(0))/' "$WORK/PhotoManager.swift" ;;
+    clearsuccess) sed -i '' 's/if let firstError {/if false, let firstError {/' "$WORK/PhotoManager.swift" ;;
+    clearhide) sed -i '' '/^ *continue$/d' "$WORK/PhotoManager.swift" ;;
     clear) sed -i '' 's/let generation = processingQueue.sync { lifecycle.begin() }/let generation = self.generation/' "$WORK/PhotoManager.swift" ;;
 esac
 cp "$SRC/PhotoModel.swift" "$SRC/PrintManager.swift" "$SRC/MessageManager.swift" "$WORK/"
@@ -184,6 +190,107 @@ m.clearWatchedFolder { if case .success(let n) = $0 { clearedEmpty = n } }
 waitUntil(5) { clearedEmpty >= 0 }
 m.processNewFile(at: kept, generation: preEmpty); spin(0.5)
 check("read before clear of an empty folder is rejected", clearedEmpty == 0 && m.photos.isEmpty)
+
+// CORE-005: clear results and survivors. Denial uses the immutable flag on synthetic files only.
+func lock(_ urls: [URL], _ on: Bool) { for u in urls { try? FileManager.default.setAttributes([.immutable: on], ofItemAtPath: u.path) } }
+func exists(_ u: URL) -> Bool { FileManager.default.fileExists(atPath: u.path) }
+func clearResult(_ m: PhotoManager) -> (Result<Int, ClearFolderError>, Bool)? {
+    var out: Result<Int, ClearFolderError>?, main = true
+    m.clearWatchedFolder { out = $0; main = main && Thread.isMainThread }
+    waitUntil(10) { out != nil }
+    spin(0.5)
+    return out.map { ($0, main) }
+}
+func succeeded(_ r: Result<Int, ClearFolderError>?) -> Int? {
+    if case .success(let n) = r { return n }
+    return nil
+}
+func failure(_ r: Result<Int, ClearFolderError>?) -> (Int, Int, String)? {
+    if case .failure(.deleteFailed(let d, let f, let e)) = r { return (d, f, e.localizedDescription) }
+    return nil
+}
+let Z = folder("Z"), Zt = folder("Zt")
+let note = Z.appendingPathComponent("note.txt"); try! "x".write(to: note, atomically: true, encoding: .utf8)
+let zs = (0..<3).map { Z.appendingPathComponent("z\($0).png") }
+for u in zs { png(u) }
+m.setWatchedFolder(Zt); spin(0.3)
+if let (r, main) = clearResult(m) {
+    check("clear: empty folder succeeds with 0 and completes on main", succeeded(r) == 0 && main && !m.isClearing)
+}
+m.setWatchedFolder(Z); spin(0.6)
+lock(zs, true)
+var res = clearResult(m)
+var ff = failure(res?.0)
+check("clear: total denial reports 0 deleted, 3 failed, with the error", ff?.0 == 0 && ff?.1 == 3 && !(ff?.2.isEmpty ?? true) && res?.1 == true)
+check("clear: total denial keeps every file and row, ends busy", zs.allSatisfy(exists) && Set(names(m)) == ["z0.png", "z1.png", "z2.png"] && !m.isClearing)
+lock([zs[1]], false)
+res = clearResult(m); ff = failure(res?.0)
+check("clear: mixed reports 1 deleted, 2 failed", ff?.0 == 1 && ff?.1 == 2)
+check("clear: mixed removes only the deleted row and keeps survivors and non-images",
+      !exists(zs[1]) && exists(zs[0]) && exists(zs[2]) && exists(note) && Set(names(m)) == ["z0.png", "z2.png"] && !m.isClearing)
+lock(zs, false)
+res = clearResult(m)
+check("clear: after permission is restored the survivors are deleted", succeeded(res?.0) == 2 && m.photos.isEmpty && !zs.contains(where: exists) && exists(note))
+
+// Survivors missing from the list (scan not finished) are re-read after a failed clear
+let Zr = folder("Zr"); let zr = Zr.appendingPathComponent("r.png"); png(zr)
+m.setWatchedFolder(Zr); spin(0.5)
+lock([zr], true)
+m.photos.removeAll()
+res = clearResult(m)
+check("clear: survivor absent from the list is listed again", failure(res?.0)?.1 == 1 && names(m) == ["r.png"])
+lock([zr], false)
+
+// Arrivals during deletion and files that vanish: only the captured list is deleted
+let Zb = folder("Zb")
+for i in 0..<300 { png(Zb.appendingPathComponent("b\(i).png")) }
+m.setWatchedFolder(Zb); spin(1.0)
+var outB: Result<Int, ClearFolderError>?
+m.clearWatchedFolder { outB = $0 }
+let arrived = Zb.appendingPathComponent("arrived.png"); png(arrived)
+m.processNewFile(at: arrived, generation: m.generation)
+try? FileManager.default.removeItem(at: Zb.appendingPathComponent("b299.png"))
+waitUntil(10) { outB != nil }; spin(0.5)
+check("clear: arrival is neither deleted nor hidden, vanished file is not a failure",
+      succeeded(outB) != nil && exists(arrived) && names(m) == ["arrived.png"] && !m.isClearing)
+
+// Failure reported after a switch must not touch the new folder
+let Zc = folder("Zc"), Zd = folder("Zd")
+let zc = Zc.appendingPathComponent("c.png"); png(zc); png(Zd.appendingPathComponent("d.png"))
+m.setWatchedFolder(Zc); spin(0.5)
+lock([zc], true)
+var outC: Result<Int, ClearFolderError>?
+m.clearWatchedFolder { outC = $0 }
+m.setWatchedFolder(Zd)
+waitUntil(5) { outC != nil }; spin(0.5)
+check("clear: failure after a switch is reported without changing the new folder", failure(outC)?.1 == 1 && names(m) == ["d.png"] && !m.isClearing)
+lock([zc], false)
+for d in [Z, Zt, Zr, Zb, Zc, Zd] { lock((try? FileManager.default.contentsOfDirectory(at: d, includingPropertiesForKeys: nil)) ?? [], false); try? FileManager.default.removeItem(at: d) }
+
+// Access lost after enumeration is a failure, not "gone"; rows of survivors stay
+let Za = folder("Za")
+let zas = (0..<3).map { Za.appendingPathComponent("a\($0).png") }
+for u in zas { png(u) }
+m.setWatchedFolder(Za); spin(0.6)
+var outA: Result<Int, ClearFolderError>?
+m.clearWatchedFolder { outA = $0 }
+chmod(Za.path, 0)
+waitUntil(5) { outA != nil }; spin(0.3)
+chmod(Za.path, 0o755)
+let ffa = failure(outA)
+check("clear: lost folder access is reported as failure, survivors stay on disk and in the list",
+      ffa != nil && (ffa!.0 + ffa!.1) == 3 && Set(names(m)) == Set(zas.filter(exists).map { $0.lastPathComponent }) && !m.isClearing)
+
+// Empty clear: a publication queued before completion survives
+let Ze = folder("Ze"), Zx = folder("Zx")
+let zx = Zx.appendingPathComponent("arrive.png"); png(zx)
+m.setWatchedFolder(Ze); spin(0.4)
+var outE: Result<Int, ClearFolderError>?
+m.clearWatchedFolder { outE = $0 }
+m.publish(PhotoModel(url: zx, sequence: m.nextSequence())!, generation: m.generation)
+waitUntil(5) { outE != nil }; spin(0.2)
+check("clear: empty-folder completion keeps a publication queued before it", succeeded(outE) == 0 && names(m) == ["arrive.png"])
+for d in [Za, Ze, Zx] { chmod(d.path, 0o755); try? FileManager.default.removeItem(at: d) }
 
 // Ordering, dedup, captured selection
 let O = folder("O"), N = folder("N")
