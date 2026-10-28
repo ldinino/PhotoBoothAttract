@@ -226,19 +226,33 @@ photo array while the image remained on disk.
 files instead of hiding them. Cover empty folders, denied deletions and folder changes
 during a clear. Destructive checks must use disposable fixtures, never an event folder.
 
-**Status: fixed on `fix/core-005-clear-failures` (PR pending audit).** `clearWatchedFolder` now returns
-`.failure(.deleteFailed(deleted:failed:first:))` when any captured file survives (total denial: 0 deleted;
-partial: "Folder partly cleared"). Only deleted or already-vanished files lose rows; survivors are re-read
-through `reconcile`, arrivals outside the captured list are untouched, and busy state is reset only for the
-current generation. Only a confirmed ENOENT counts as gone; access errors stay failures. An empty-folder clear no longer resets the list.
+**Status: fixed in PR #6 (`93e1746`).** Independently reviewed at `00fce93`; automated checks,
+Debug build and local real-window alert checks pass. Intel/TV clear qualification remains open.
 
-**Verified:** `check-folder-lifecycle.sh` passes (empty, total denial, mixed, survivor re-listing, arrival and
-vanished file during deletion, failure after a folder switch; main-thread completion). Mutants
-`clearsuccess`, `clearaccess`, `clearempty` and `clearhide` fail 5, 7, 1 and 1 checks. Debug build succeeds. Denial uses the immutable flag on
-synthetic files, not a read-only directory.
+**Behavior:** `clearWatchedFolder` returns `.failure(.deleteFailed(deleted:failed:first:))` for failed
+deletions, with accurate partial/total failure counts. Only deleted or confirmed-absent files lose rows.
+Existing survivor rows are retained; missing survivor rows are re-read through `reconcile`. Arrivals
+outside the captured list are untouched, and busy state is reset only for the current generation.
+Only a confirmed ENOENT counts as gone; access errors stay failures. Empty clears do not reset the list.
 
-**Not verified:** the confirmation and result alerts were not inspected in a running app; Intel/TV event Mac
-clear behavior needs fresh device evidence. Stale-completion busy state has no dedicated mutant.
+**Independent verification (2026-10-28):** `check-folder-lifecycle.sh` passes all 101 assertions at the
+reviewed head and again on merged `main`. The Debug build succeeds. Mutants `clearsuccess`, `clearaccess`,
+`clearempty` and `clearhide` fail 5, 7, 1 and 1 checks. Separate deterministic probes confirm that access
+lost after enumeration reports failure without hiding the survivor, and an arrival queued before
+empty-clear completion stays visible. An adjacent queued-removal check also passes with the live watcher.
+
+**Real-window verification:** launched the actual Debug app with a disposable synthetic folder and
+temporary home. Native Accessibility drove the confirmation and result alerts for partial failure
+(3 deleted, 1 failed), total failure (0 deleted, 1 failed), restored-permission success (1 deleted)
+and empty success (0 deleted). The locked photo remained visible and a text file was untouched.
+Screenshots of the partial, denied and empty results were inspected. Host preferences were backed up
+and restored; only the reviewer-launched app was closed. Temporary probes, fixtures, screenshots and
+build output were removed. No printing or Messages action was triggered.
+
+**Limits:** Intel/TV event Mac clear behavior still needs fresh device evidence; the earlier 1.0.16
+test ZIP predates PR #6. The harness lost-access check remains timing-based, although the independent
+review probe fixes the ordering. Stale-completion busy state has no dedicated mutant. The overall
+core acceptance gate remains open.
 
 ## CORE-006: Initial Scan Blocks the UI
 
