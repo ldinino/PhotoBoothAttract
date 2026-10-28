@@ -9,6 +9,7 @@
 # do not advance ordering | verification reads on the main thread.
 # LIFECYCLE_MUTANT=mainscan|nostop|stalebusy: initial scan on main | stale scan keeps preparing files | stale
 # scan completion ends the new busy state.
+# LIFECYCLE_MUTANT=clearaccess|clearempty: access errors count as gone | empty clear wipes the list.
 # LIFECYCLE_MUTANT=clearsuccess|clearhide: CORE-005 clear always reports success | failed deletions lose their rows.
 set -euo pipefail
 
@@ -31,8 +32,10 @@ case "${LIFECYCLE_MUTANT:-}" in
     mainscan) sed -i '' '/func scanExistingFiles/,/^    }$/ s/DispatchQueue.global(qos: .userInitiated).async/DispatchQueue.main.async/' "$WORK/PhotoManager.swift" ;;
     nostop) sed -i '' '/guard self.isCurrent(generation) else { break }/d' "$WORK/PhotoManager.swift" ;;
     stalebusy) sed -i '' 's/if self.isCurrent(generation) { self.isRefreshing = false }/self.isRefreshing = false/' "$WORK/PhotoManager.swift" ;;
+    clearaccess) sed -i '' 's/lstat(url.path, \&info) != 0 \&\& errno == ENOENT/true/' "$WORK/PhotoManager.swift" ;;
+    clearempty) sed -i '' 's/                    completion(.success(0))/                    self.photos.removeAll(); completion(.success(0))/' "$WORK/PhotoManager.swift" ;;
     clearsuccess) sed -i '' 's/if let firstError {/if false, let firstError {/' "$WORK/PhotoManager.swift" ;;
-    clearhide) sed -i '' '/self.reconcile(url, generation: generation)/{N;d;}' "$WORK/PhotoManager.swift" ;;
+    clearhide) sed -i '' '/^ *continue$/d' "$WORK/PhotoManager.swift" ;;
     clear) sed -i '' 's/let generation = processingQueue.sync { lifecycle.begin() }/let generation = self.generation/' "$WORK/PhotoManager.swift" ;;
 esac
 cp "$SRC/PhotoModel.swift" "$SRC/PrintManager.swift" "$SRC/MessageManager.swift" "$WORK/"
@@ -263,6 +266,31 @@ waitUntil(5) { outC != nil }; spin(0.5)
 check("clear: failure after a switch is reported without changing the new folder", failure(outC)?.1 == 1 && names(m) == ["d.png"] && !m.isClearing)
 lock([zc], false)
 for d in [Z, Zt, Zr, Zb, Zc, Zd] { lock((try? FileManager.default.contentsOfDirectory(at: d, includingPropertiesForKeys: nil)) ?? [], false); try? FileManager.default.removeItem(at: d) }
+
+// Access lost after enumeration is a failure, not "gone"; rows of survivors stay
+let Za = folder("Za")
+let zas = (0..<3).map { Za.appendingPathComponent("a\($0).png") }
+for u in zas { png(u) }
+m.setWatchedFolder(Za); spin(0.6)
+var outA: Result<Int, ClearFolderError>?
+m.clearWatchedFolder { outA = $0 }
+chmod(Za.path, 0)
+waitUntil(5) { outA != nil }; spin(0.3)
+chmod(Za.path, 0o755)
+let ffa = failure(outA)
+check("clear: lost folder access is reported as failure, survivors stay on disk and in the list",
+      ffa != nil && (ffa!.0 + ffa!.1) == 3 && Set(names(m)) == Set(zas.filter(exists).map { $0.lastPathComponent }) && !m.isClearing)
+
+// Empty clear: a publication queued before completion survives
+let Ze = folder("Ze"), Zx = folder("Zx")
+let zx = Zx.appendingPathComponent("arrive.png"); png(zx)
+m.setWatchedFolder(Ze); spin(0.4)
+var outE: Result<Int, ClearFolderError>?
+m.clearWatchedFolder { outE = $0 }
+m.publish(PhotoModel(url: zx, sequence: m.nextSequence())!, generation: m.generation)
+waitUntil(5) { outE != nil }; spin(0.2)
+check("clear: empty-folder completion keeps a publication queued before it", succeeded(outE) == 0 && names(m) == ["arrive.png"])
+for d in [Za, Ze, Zx] { chmod(d.path, 0o755); try? FileManager.default.removeItem(at: d) }
 
 // Ordering, dedup, captured selection
 let O = folder("O"), N = folder("N")

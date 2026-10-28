@@ -218,7 +218,6 @@ class PhotoManager: ObservableObject {
             if urlsToDelete.isEmpty {
                 ErrorLog.shared.log("Clear folder triggered: folder is empty (\(folderPath))")
                 DispatchQueue.main.async {
-                    if self.isCurrent(generation) { self.photos.removeAll() }
                     completion(.success(0))
                 }
                 return
@@ -228,23 +227,29 @@ class PhotoManager: ObservableObject {
             DispatchQueue.global(qos: .userInitiated).async {
                 var deletedCount = 0, failedCount = 0
                 var firstError: Error?
+                var survivors: [URL] = []
                 for url in urlsToDelete {
                     do {
                         try FileManager.default.removeItem(at: url)
                         deletedCount += 1
                     } catch {
-                        if Self.fileExists(url) {
+                        if !Self.isAbsent(url) {
                             failedCount += 1
+                            survivors.append(url)
                             firstError = firstError ?? error
                             ErrorLog.shared.log("Clear folder: failed to delete \(url.lastPathComponent): \(error)")
-                            self.reconcile(url, generation: generation)
                             continue
                         }
                     }
                     self.removePhoto(at: url, generation: generation, observedAt: self.nextSequence())
                 }
                 DispatchQueue.main.async {
-                    if self.isCurrent(generation) { self.isClearing = false }
+                    if self.isCurrent(generation) {
+                        self.isClearing = false
+                        for url in survivors where !self.photos.contains(where: { $0.url == url }) {
+                            self.reconcile(url, generation: generation)
+                        }
+                    }
                     if let firstError {
                         completion(.failure(.deleteFailed(deleted: deletedCount, failed: failedCount, first: firstError)))
                     } else {
@@ -255,8 +260,10 @@ class PhotoManager: ObservableObject {
         }
     }
 
-    private static func fileExists(_ url: URL) -> Bool {
-        (try? url.checkResourceIsReachable()) == true
+    /// Only a confirmed ENOENT counts as gone; access errors leave the file a survivor.
+    private static func isAbsent(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) != 0 && errno == ENOENT
     }
 
     /// Lists direct children of the watched folder that are regular files with allowed image extensions. Fails if no folder or path is unsafe (root or home).

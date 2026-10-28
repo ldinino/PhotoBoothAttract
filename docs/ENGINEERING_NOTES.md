@@ -230,11 +230,11 @@ during a clear. Destructive checks must use disposable fixtures, never an event 
 `.failure(.deleteFailed(deleted:failed:first:))` when any captured file survives (total denial: 0 deleted;
 partial: "Folder partly cleared"). Only deleted or already-vanished files lose rows; survivors are re-read
 through `reconcile`, arrivals outside the captured list are untouched, and busy state is reset only for the
-current generation. An empty-folder clear still clears the list directly.
+current generation. Only a confirmed ENOENT counts as gone; access errors stay failures. An empty-folder clear no longer resets the list.
 
 **Verified:** `check-folder-lifecycle.sh` passes (empty, total denial, mixed, survivor re-listing, arrival and
 vanished file during deletion, failure after a folder switch; main-thread completion). Mutants
-`clearsuccess` and `clearhide` fail 4 and 3 checks. Debug build succeeds. Denial uses the immutable flag on
+`clearsuccess`, `clearaccess`, `clearempty` and `clearhide` fail 5, 7, 1 and 1 checks. Debug build succeeds. Denial uses the immutable flag on
 synthetic files, not a read-only directory.
 
 **Not verified:** the confirmation and result alerts were not inspected in a running app; Intel/TV event Mac
