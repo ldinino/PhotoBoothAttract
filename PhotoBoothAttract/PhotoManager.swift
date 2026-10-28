@@ -95,13 +95,16 @@ class PhotoManager: ObservableObject {
     private var lifecycle = FolderLifecycle()
     private let queue = DispatchQueue(label: "com.photobooth.fsevents", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.photobooth.processing")
+    /// Test seam: called off main before enumerating a folder and before preparing each file.
+    nonisolated(unsafe) var scanHook: ((URL) -> Void)?
     
     private static let bookmarkKey = "watchedFolderBookmark"
     static let allowedExtensions: Set<String> = ["jpg", "jpeg", "png"]
     
     // MARK: - Configuration
     
-    init() {
+    init(scanHook: ((URL) -> Void)? = nil) {
+        self.scanHook = scanHook
         restoreSavedFolder()
     }
     
@@ -137,35 +140,8 @@ class PhotoManager: ObservableObject {
     func refreshWatcher() {
         guard let url = watchedFolderURL else { return }
         let generation = beginLifecycle()
-        isRefreshing = true
-
         startWatching(url, generation: generation)
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            self.scanExistingFilesSync(at: url, generation: generation)
-            DispatchQueue.main.async {
-                if self.isCurrent(generation) { self.isRefreshing = false }
-            }
-        }
-    }
-
-    private func scanExistingFilesSync(at url: URL, generation: Int) {
-        do {
-            let files = try FileManager.default.contentsOfDirectory(
-                at: url,
-                includingPropertiesForKeys: [.creationDateKey],
-                options: .skipsHiddenFiles
-            )
-            let group = DispatchGroup()
-            for file in files {
-                group.enter()
-                processNewFile(at: file, generation: generation)
-                group.leave()
-            }
-            group.wait()
-        } catch {
-            ErrorLog.shared.log("Refresh scan failed: \(error)")
-        }
+        scanExistingFiles(at: url, generation: generation)
     }
 
     func setWatchedFolder(_ url: URL) {
@@ -236,6 +212,7 @@ class PhotoManager: ObservableObject {
             let folderPath = watchedFolderURL!.standardized.path
             stopWatching()
             let generation = processingQueue.sync { lifecycle.begin() }
+            isRefreshing = false
             startWatching(watchedFolderURL!, generation: generation)
             if urlsToDelete.isEmpty {
                 ErrorLog.shared.log("Clear folder triggered: folder is empty (\(folderPath))")
@@ -401,14 +378,25 @@ class PhotoManager: ObservableObject {
         }
     }
     
+    /// Enumerates and prepares existing files one at a time off main; stops once the lifecycle is stale.
+    /// Busy ends when that pass ends; retries for incomplete files continue in the background.
     private func scanExistingFiles(at url: URL, generation: Int) {
-        do {
-            let files = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)
-            for file in files {
-                processNewFile(at: file, generation: generation)
+        isRefreshing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.scanHook?(url)
+            do {
+                let files = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)
+                for file in files {
+                    guard self.isCurrent(generation) else { break }
+                    self.scanHook?(file)
+                    self.processNewFile(at: file, generation: generation)
+                }
+            } catch {
+                ErrorLog.shared.log("Failed to scan directory: \(error)")
             }
-        } catch {
-            ErrorLog.shared.log("Failed to scan directory: \(error)")
+            DispatchQueue.main.async {
+                if self.isCurrent(generation) { self.isRefreshing = false }
+            }
         }
     }
     

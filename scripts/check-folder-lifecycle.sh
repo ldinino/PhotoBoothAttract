@@ -7,6 +7,8 @@
 # also drops a newer replacement.
 # LIFECYCLE_MUTANT=url|stale|watermark|mainread: URL-only identity | older revision wins | unchanged reads
 # do not advance ordering | verification reads on the main thread.
+# LIFECYCLE_MUTANT=mainscan|nostop|stalebusy: initial scan on main | stale scan keeps preparing files | stale
+# scan completion ends the new busy state.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")/../PhotoBoothAttract" && pwd)"
@@ -25,6 +27,9 @@ case "${LIFECYCLE_MUTANT:-}" in
     stale) sed -i '' 's/guard photo.sequence > current.sequence else { return }//' "$WORK/PhotoManager.swift" ;;
     watermark) sed -i '' 's/photos\[index\].sequence = photo.sequence/_ = 0/' "$WORK/PhotoManager.swift" ;;
     current) sed -i '' 's/generation == self.generation/true/' "$WORK/PhotoManager.swift" ;;
+    mainscan) sed -i '' '/func scanExistingFiles/,/^    }$/ s/DispatchQueue.global(qos: .userInitiated).async/DispatchQueue.main.async/' "$WORK/PhotoManager.swift" ;;
+    nostop) sed -i '' '/guard self.isCurrent(generation) else { break }/d' "$WORK/PhotoManager.swift" ;;
+    stalebusy) sed -i '' 's/if self.isCurrent(generation) { self.isRefreshing = false }/self.isRefreshing = false/' "$WORK/PhotoManager.swift" ;;
     clear) sed -i '' 's/let generation = processingQueue.sync { lifecycle.begin() }/let generation = self.generation/' "$WORK/PhotoManager.swift" ;;
 esac
 cp "$SRC/PhotoModel.swift" "$SRC/PrintManager.swift" "$SRC/MessageManager.swift" "$WORK/"
@@ -36,6 +41,7 @@ echo 'final class ErrorLog { static let shared = ErrorLog(); func log(_ m: Strin
 
 cat > "$WORK/main.swift" <<'EOF'
 import AppKit
+import Combine
 import Foundation
 
 var failures = 0
@@ -129,7 +135,8 @@ check("stale cleanup cannot release a refreshed claim", {
     return m.processingQueue.sync { m.lifecycle.owns(g, generation: current) }
 }())
 m.refreshWatcher(); m.setWatchedFolder(E)
-check("switch during refresh clears busy state", !m.isRefreshing)
+waitUntil(2) { !m.isRefreshing }
+check("switch during refresh: busy ends with the new folder's scan", !m.isRefreshing)
 spin(1.0)
 check("old refresh scan and completion do not alter new folder", m.photos.isEmpty && !m.isRefreshing)
 
@@ -444,6 +451,93 @@ check("live: rename out of folder leaves automatically", row(m, "mv.png") == nil
 spin(1.0); try? FileManager.default.moveItem(at: lp, to: Lv.appendingPathComponent("renamed.png")); waitUntil(6) { row(m, "renamed.png") != nil && row(m, "live.png") == nil }
 check("live: rename within folder swaps rows automatically", row(m, "renamed.png") != nil && row(m, "live.png") == nil)
 for d in [Ev, Lv, LvX] { try? FileManager.default.removeItem(at: d) }
+
+// CORE-006: initial scans run off main. The hook delays enumeration and every file, so a main-thread scan or an
+// unstopped stale scan is visible.
+final class Probe {
+    private let lock = NSLock()
+    private var seen: [String] = [], main = false
+    func hook(_ delay: Double) -> (URL) -> Void {
+        { [self] u in
+            lock.lock(); seen.append(u.lastPathComponent); main = main || Thread.isMainThread; lock.unlock()
+            Thread.sleep(forTimeInterval: delay)
+        }
+    }
+    var onMain: Bool { lock.lock(); defer { lock.unlock() }; return main }
+    func files(_ prefix: String) -> Int { lock.lock(); defer { lock.unlock() }; return seen.filter { $0.hasPrefix(prefix) }.count }
+}
+func filled(_ prefix: String, _ count: Int) -> URL {
+    let d = folder(prefix)
+    for i in 0..<count { png(d.appendingPathComponent("\(prefix)\(i).png"), created: Date().addingTimeInterval(Double(-i))) }
+    return d
+}
+var ticks6 = 0
+let timer6 = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in ticks6 += 1 }
+var offMainPublication = false
+var sinks6 = Set<AnyCancellable>()
+func watch(_ r: PhotoManager) {
+    r.$photos.dropFirst().sink { _ in if !Thread.isMainThread { offMainPublication = true } }.store(in: &sinks6)
+    r.$isRefreshing.dropFirst().sink { _ in if !Thread.isMainThread { offMainPublication = true } }.store(in: &sinks6)
+}
+
+// Startup restoration reads the bookmark saved by the previous selection
+let G = filled("g", 5)
+m.setWatchedFolder(G); spin(0.5)
+let pStart = Probe()
+let t6 = Date()
+let r = PhotoManager(scanHook: pStart.hook(0.2))
+check("startup: init returns before the delayed scan and shows busy", Date().timeIntervalSince(t6) < 0.15 && r.isRefreshing && r.photos.isEmpty)
+let tk = ticks6; spin(0.5)
+check("startup: main run loop keeps running while photos load", ticks6 - tk >= 8)
+waitUntil(6) { !r.isRefreshing }
+check("startup: restored folder is listed and nothing was prepared on main", r.photos.count == 5 && !pStart.onMain && r.watchedFolderURL?.lastPathComponent == G.lastPathComponent)
+
+// Folder selection
+watch(r)
+let H = filled("h", 4)
+let pSel = Probe(); r.scanHook = pSel.hook(0.2)
+let t7 = Date(); r.setWatchedFolder(H)
+check("select: call returns before the delayed scan and shows busy", Date().timeIntervalSince(t7) < 0.15 && r.isRefreshing && r.photos.isEmpty)
+let tk2 = ticks6; spin(0.4)
+check("select: main run loop keeps running while photos load", ticks6 - tk2 >= 5)
+waitUntil(6) { !r.isRefreshing }
+check("select: populated folder lists every photo newest first, off main, published on main",
+      names(r) == (0..<4).map { "h\($0).png" } && !pSel.onMain && !offMainPublication)
+
+// Empty and error states end busy
+r.setWatchedFolder(folder("e6")); waitUntil(3) { !r.isRefreshing }
+check("empty folder: busy ends and nothing is listed", !r.isRefreshing && r.photos.isEmpty)
+r.setWatchedFolder(URL(fileURLWithPath: "/private/tmp/missing-\(UUID().uuidString)")); waitUntil(3) { !r.isRefreshing }
+check("unreadable folder: busy ends and nothing is listed", !r.isRefreshing && r.photos.isEmpty)
+
+// Switch during load: the old scan stops and cannot clear the new scan's busy state
+let S1 = filled("s1x", 6), S2 = filled("s2x", 3)
+let pSw = Probe(); r.scanHook = pSw.hook(0.3)
+r.setWatchedFolder(S1); spin(0.5)
+r.setWatchedFolder(S2); spin(0.9)
+check("switch during load: old scan finished without ending the new busy state", r.isRefreshing)
+waitUntil(6) { !r.isRefreshing }
+check("switch during load: only the new folder is listed and the old scan stopped early", names(r).sorted() == ["s2x0.png", "s2x1.png", "s2x2.png"] && pSw.files("s1x") <= 2)
+
+// Same-folder refresh during load
+let T = filled("t", 5)
+let pRf = Probe(); r.scanHook = pRf.hook(0.2)
+r.setWatchedFolder(T); spin(0.5)
+r.refreshWatcher()
+waitUntil(6) { !r.isRefreshing }
+check("refresh during load: each photo listed once and the old scan stopped early", r.photos.count == 5 && Set(names(r)).count == 5 && pRf.files("t") <= 7)
+
+// Clear during load
+let U = filled("u", 6)
+let pCl = Probe(); r.scanHook = pCl.hook(0.2)
+r.setWatchedFolder(U); spin(0.5)
+var clearedU = -1
+r.clearWatchedFolder { if case .success(let n) = $0 { clearedU = n } }
+check("clear during load: busy is reset", !r.isRefreshing)
+waitUntil(5) { clearedU >= 0 }; spin(1.0)
+check("clear during load: nothing repopulates, busy stays off, old scan stopped early", clearedU == 6 && r.photos.isEmpty && !r.isRefreshing && pCl.files("u") <= 2)
+timer6.invalidate()
+for d in [G, H, S1, S2, T, U] { try? FileManager.default.removeItem(at: d) }
 
 for d in [I, J, Kd, Oo, Wm, Fo] { try? FileManager.default.removeItem(at: d) }
 

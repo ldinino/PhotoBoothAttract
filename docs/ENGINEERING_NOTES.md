@@ -239,6 +239,25 @@ on the older event Mac was not measured.
 state updates remain on the main actor. Check a populated synthetic folder, cancellation
 or folder switching during load, and responsiveness on the older event Mac.
 
+**Status (PR #5, head `4e12a8e`):** startup restoration, folder selection and refresh share one
+background scan in `PhotoManager`. It prepares one file at a time, stops once its lifecycle is
+stale, and ends the busy flag on main only if still current. Clear resets busy because it abandons
+a scan. Retries for incomplete files are not awaited by the busy flag.
+
+**Evidence:** `bash scripts/check-folder-lifecycle.sh` passed 90 assertions twice (77 existing, 13
+new; one reworded because selection is now busy for its own scan). Delayed enumeration/preparation
+proved the main run loop ticks, nothing is prepared on main, and publications occur on main, for
+startup, populated selection, empty and unreadable folders, switch, refresh and clear during load.
+Mutants `mainscan` (7 failures), `nostop` (3) and `stalebusy` (3) were rejected. The brief's
+Debug `xcodebuild` succeeded. A launch with 40 synthetic 5000x3500 JPEGs showed via `sample` the
+main thread idle in the run loop while `PhotoModel.init` ran on a worker.
+
+**Open:** older Intel event Mac responsiveness and guest display during load are unverified, so the
+qualification and the overall core acceptance gate stay open. Manual check on that Mac: copy about
+40 large synthetic photos to a disposable folder, select it, and confirm the window, Refresh
+state and new arrivals stay responsive; a beachball or frozen controls is a failure. Send a
+sanitized screen recording or `sample` output and the Mac model.
+
 ## CORE-007: Print and Digital Failure Handling
 
 **Owner:** [AssistantView.swift](../PhotoBoothAttract/AssistantView.swift#L419),
