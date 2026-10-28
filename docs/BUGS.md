@@ -11,7 +11,7 @@ and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until cor
 
 ## Medium Priority
 
-- [ ] **CORE-003: Attachment collisions.** Different photos with the same basename overwrite the same temporary share file. **File overwrite reproduced; Messages consumption unverified.** [Notes](ENGINEERING_NOTES.md#core-003-attachment-file-collisions)
+- [ ] **CORE-003: Attachment collisions.** Code fix merged in PR #7 (`6e2a68a`); 108 checks and Debug build pass. **Messages consumption and Intel/Apple Silicon draft validation deferred to the final CORE hardware pass.** [Notes](ENGINEERING_NOTES.md#core-003-attachment-file-collisions)
 - [x] **CORE-004: Missing filesystem events.** Fixed in PR #3 (`6fe6bde`). Automated checks, live FSEvents, Debug build and isolated real-window updates pass. [Notes](ENGINEERING_NOTES.md#core-004-filesystem-event-coverage)
 - [ ] **CORE-005: Clear-folder failures.** Fixed in PR #6 (`93e1746`); 101 checks, Debug build and local confirmation/result-alert checks pass. **Intel/TV clear qualification deferred to the final CORE hardware pass.** [Notes](ENGINEERING_NOTES.md#core-005-clear-folder-failure-reporting)
 - [x] **CORE-006: Blocking initial scan.** Fixed in PR #5 (`6960a86`). 90 automated checks, Debug/universal Release builds and maintainer-reported Intel/guest-display checks pass (2026-10-28). [Notes](ENGINEERING_NOTES.md#core-006-initial-scan-blocks-the-ui)
