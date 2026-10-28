@@ -1,6 +1,6 @@
 # Core Bug Punchlist
 
-CORE-001, CORE-002 and CORE-004 are closed; six items remain open. Baseline reviewed on 2026-10-27 at `1a7089b`.
+CORE-001, CORE-002, CORE-004 and CORE-006 are closed; five items remain open. Baseline reviewed on 2026-10-27 at `1a7089b`.
 See [ENGINEERING_NOTES.md](ENGINEERING_NOTES.md) for evidence and acceptance checks,
 and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until core cleanup is accepted.
 
@@ -14,7 +14,7 @@ and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until cor
 - [ ] **CORE-003: Attachment collisions.** Different photos with the same basename overwrite the same temporary share file. **File overwrite reproduced; Messages consumption unverified.** [Notes](ENGINEERING_NOTES.md#core-003-attachment-file-collisions)
 - [x] **CORE-004: Missing filesystem events.** Fixed in PR #3 (`6fe6bde`). Automated checks, live FSEvents, Debug build and isolated real-window updates pass. [Notes](ENGINEERING_NOTES.md#core-004-filesystem-event-coverage)
 - [ ] **CORE-005: Clear-folder failures.** Failed deletions still report success and remove surviving photos from the interface. **Reproduced.** [Notes](ENGINEERING_NOTES.md#core-005-clear-folder-failure-reporting)
-- [ ] **CORE-006: Blocking initial scan.** Startup and folder selection enumerate files and generate thumbnails on the UI thread. **Source-confirmed; event-Mac impact unmeasured.** [Notes](ENGINEERING_NOTES.md#core-006-initial-scan-blocks-the-ui)
+- [x] **CORE-006: Blocking initial scan.** Fixed in PR #5 (`6960a86`). 90 automated checks, Debug/universal Release builds and maintainer-reported Intel/guest-display checks pass (2026-10-28). [Notes](ENGINEERING_NOTES.md#core-006-initial-scan-blocks-the-ui)
 - [ ] **CORE-007: Ignored print failure.** Print & Digital opens the draft and dismisses the sheet regardless of the print result. **Source-confirmed; no print attempted.** [Notes](ENGINEERING_NOTES.md#core-007-print-and-digital-failure-handling)
 - [ ] **CORE-008: Lost photo orientation.** Sharing JPEGs below the downscaling threshold drops EXIF rotation. **Reproduced.** [Notes](ENGINEERING_NOTES.md#core-008-share-image-orientation)
 

@@ -231,15 +231,18 @@ during a clear. Destructive checks must use disposable fixtures, never an event 
 **Owner:** [PhotoManager.swift](../PhotoBoothAttract/PhotoManager.swift#L262),
 called during folder selection and saved-folder restoration.
 
-**Evidence:** Source inspection shows synchronous enumeration followed by per-file
+**Baseline evidence (2026-10-27):** Source inspection showed synchronous enumeration followed by per-file
 image-source validation and thumbnail generation on the caller's UI thread. Performance
-on the older event Mac was not measured.
+on the older event Mac was not measured at that review.
 
 **Acceptance:** Folder enumeration and decoding do not block UI interaction. Observable
 state updates remain on the main actor. Check a populated synthetic folder, cancellation
 or folder switching during load, and responsiveness on the older event Mac.
 
-**Status (PR #5, head `4e12a8e`):** startup restoration, folder selection and refresh share one
+**Status: closed.** Fixed in PR #5 (`6960a86`); automated checks, Debug and universal Release
+builds, and maintainer-reported Intel/guest-display checks pass (2026-10-28).
+
+**Fix (PR #5, merged as `6960a86`):** startup restoration, folder selection and refresh share one
 background scan in `PhotoManager`. It prepares one file at a time, stops once its lifecycle is
 stale, and ends the busy flag on main only if still current. Clear resets busy because it abandons
 a scan. Retries for incomplete files are not awaited by the busy flag.
@@ -252,11 +255,25 @@ Mutants `mainscan` (7 failures), `nostop` (3) and `stalebusy` (3) were rejected.
 Debug `xcodebuild` succeeded. A launch with 40 synthetic 5000x3500 JPEGs showed via `sample` the
 main thread idle in the run loop while `PhotoModel.init` ran on a worker.
 
-**Open:** older Intel event Mac responsiveness and guest display during load are unverified, so the
-qualification and the overall core acceptance gate stay open. Manual check on that Mac: copy about
-40 large synthetic photos to a disposable folder, select it, and confirm the window, Refresh
-state and new arrivals stay responsive; a beachball or frozen controls is a failure. Send a
-sanitized screen recording or `sample` output and the Mac model.
+**Maintainer manual verification (2026-10-28):** all six requested checks reported passing on the
+event Mac using the local universal Release 1.0.16 (build 16), including the new icon (`c888d6f`).
+These are maintainer-reported results, not automated UI inspection or independently observed
+device behavior.
+
+**Sanitized hardware:** MacBookPro9,2; 2.5 GHz dual-core Intel Core i5; 16 GB RAM. The macOS 15.7+
+minimum was reported passing in check 1; the exact running OS version and build are not yet recorded.
+
+1. Minimum OS check and transfer/unzip into a separate test folder pass.
+2. Extended-display launch shows the new icon, assistant window on the Mac and guest grid on the TV.
+3. Selecting 40 large synthetic JPEGs (about 5000x3500) stays responsive while resizing and scrolling,
+   without freezing or beachballing.
+4. Switching from loading folder A to folder B leaves only B's two images and ends the busy state.
+5. Refresh plus a fresh JPEG arrival lists it once; guest numbers 1-4 match the assistant.
+6. Quit/reopen restores the saved folder responsively and lists all 41 photos without duplicates.
+
+**Limits:** These six checks qualify CORE-006 on this Mac only. Printing, Messages, SDK transfer,
+display disconnect/reconnect and separate clear/action edge cases were not tested. The overall
+core acceptance gate remains open. Raw hardware/system reports and device identifiers are not committed.
 
 ## CORE-007: Print and Digital Failure Handling
 
