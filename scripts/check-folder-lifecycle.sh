@@ -40,7 +40,8 @@ case "${LIFECYCLE_MUTANT:-}" in
     clear) sed -i '' 's/let generation = processingQueue.sync { lifecycle.begin() }/let generation = self.generation/' "$WORK/PhotoManager.swift" ;;
 esac
 cp "$SRC/PhotoModel.swift" "$SRC/PrintManager.swift" "$WORK/"
-sed -E 's/private (func|var|let)/\1/' "$SRC/MessageManager.swift" > "$WORK/MessageManager.swift"
+export ATTACH_ROOT="$WORK/attach/tmp"; mkdir -p "$ATTACH_ROOT"
+sed -E 's/private (func|var|let)/\1/; s|FileManager.default.temporaryDirectory|URL(fileURLWithPath: "'"$WORK"'/attach/tmp", isDirectory: true)|' "$SRC/MessageManager.swift" > "$WORK/MessageManager.swift"
 case "${LIFECYCLE_MUTANT:-}" in
     attachment) sed -i '' '/PhotoBoothAttract-messages/d; /UUID().uuidString, isDirectory: true)/d' "$WORK/MessageManager.swift" ;;
 esac
@@ -680,7 +681,7 @@ let srcDir = folder("attsrc"); let srcFile = srcDir.appendingPathComponent("IMG_
 let srcBytes = try! Data(contentsOf: srcFile)
 let fromSrc = atmm.attachmentURL(for: srcBytes, name: srcFile.lastPathComponent)!
 check("attachments: original is untouched and the copy is outside its folder", (try? Data(contentsOf: srcFile)) == srcBytes && fromSrc.deletingLastPathComponent().deletingLastPathComponent() != srcDir)
-let atkeep = fromSrc.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("atkeep-sentinel")
+let atkeep = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ATTACH_ROOT"]!).appendingPathComponent("keep-sentinel")
 try! Data("x".utf8).write(to: atkeep)
 atmm.removeRequestDirectory(of: fromSrc)
 check("attachments: cleanup removes only the request directory", !atfm.fileExists(atPath: fromSrc.deletingLastPathComponent().path) && atfm.fileExists(atPath: atkeep.path) && atfm.fileExists(atPath: ata1.path) && atfm.fileExists(atPath: srcFile.path))
