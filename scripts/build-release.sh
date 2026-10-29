@@ -6,8 +6,18 @@ PROJECT="$PROJECT_DIR/PhotoBoothAttract.xcodeproj"
 SCHEME="PhotoBoothAttract"
 CONFIG="Release"
 DIST_DIR="$PROJECT_DIR/dist"
-APP_NAME="PhotoBoothAttract"
+APP_NAME="PhotoBooth Attract"
 DERIVED_DATA="/tmp/PhotoBoothAttract-build"
+NOTARY_PROFILE="${NOTARY_KEYCHAIN_PROFILE:-}"
+
+if [ -z "$NOTARY_PROFILE" ]; then
+    echo "ERROR: Set NOTARY_KEYCHAIN_PROFILE to your notarytool Keychain profile."
+    echo "First store credentials in Terminal: xcrun notarytool store-credentials PhotoBoothAttract"
+    exit 1
+fi
+
+echo "==> Checking notarization credentials..."
+xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null
 
 rm -rf "$DIST_DIR" "$DERIVED_DATA"
 mkdir -p "$DIST_DIR"
@@ -18,6 +28,7 @@ xcodebuild \
     -scheme "$SCHEME" \
     -configuration "$CONFIG" \
     -derivedDataPath "$DERIVED_DATA" \
+    -destination "generic/platform=macOS" \
     ONLY_ACTIVE_ARCH=NO \
     ARCHS="arm64 x86_64" \
     clean build \
@@ -34,6 +45,9 @@ rm -rf "$DERIVED_DATA"
 
 APP_PATH="$DIST_DIR/$APP_NAME.app"
 BINARY="$APP_PATH/Contents/MacOS/$APP_NAME"
+
+echo "==> Verifying code signatures..."
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
 echo ""
 echo "==> Verifying universal binary..."
@@ -62,7 +76,25 @@ VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_P
 BUILD_NUM=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH/Contents/Info.plist")
 echo "==> Version: $VERSION (build $BUILD_NUM)"
 
-ZIP_NAME="${APP_NAME}-v${VERSION}.zip"
+NOTARY_ZIP="$DIST_DIR/.notarization.zip"
+trap 'rm -f "$NOTARY_ZIP"' EXIT
+ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$NOTARY_ZIP"
+
+echo "==> Submitting to Apple for notarization..."
+NOTARY_RESULT=$(xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json)
+NOTARY_STATUS=$(printf '%s' "$NOTARY_RESULT" | plutil -extract status raw -o - -)
+if [ "$NOTARY_STATUS" != "Accepted" ]; then
+    echo "ERROR: Apple did not accept the app for notarization. No release ZIP was created."
+    printf '%s\n' "$NOTARY_RESULT"
+    exit 1
+fi
+
+echo "==> Stapling and validating the notarization ticket..."
+xcrun stapler staple "$APP_PATH"
+xcrun stapler validate "$APP_PATH"
+spctl --assess --type execute --verbose=2 "$APP_PATH"
+
+ZIP_NAME="PhotoBoothAttract-v${VERSION}.zip"
 ZIP_PATH="$DIST_DIR/$ZIP_NAME"
 echo "==> Packaging $ZIP_NAME..."
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
