@@ -5,7 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$PROJECT_DIR/PhotoBoothAttract.xcodeproj"
 SCHEME="PhotoBoothAttract"
 CONFIG="Debug"
-APP_NAME="PhotoBoothAttract"
+APP_NAME="PhotoBooth Attract"
 DERIVED_DATA="/tmp/PhotoBoothAttract-build-debug"
 
 echo "==> Building $SCHEME ($CONFIG)..."
@@ -14,6 +14,7 @@ xcodebuild \
     -scheme "$SCHEME" \
     -configuration "$CONFIG" \
     -derivedDataPath "$DERIVED_DATA" \
+    -destination "platform=macOS,arch=$(uname -m)" \
     ONLY_ACTIVE_ARCH=YES \
     build \
     2>&1 | tail -5

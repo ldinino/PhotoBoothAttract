@@ -138,7 +138,7 @@ final class UpdateManager {
     private func showUpToDate() {
         let alert = NSAlert()
         alert.messageText = "You're Up to Date"
-        alert.informativeText = "PhotoBoothAttract v\(currentVersion) is the latest version."
+        alert.informativeText = "PhotoBooth Attract v\(currentVersion) is the latest version."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
