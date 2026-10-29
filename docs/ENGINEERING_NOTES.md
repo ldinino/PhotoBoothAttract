@@ -348,6 +348,15 @@ is currently applied only when generating a downscaled thumbnail above 3000 pixe
 **Acceptance:** Shared copies preserve visible orientation below, at and above the
 downscaling threshold. Cover rotated and mirrored EXIF orientations. Originals stay unchanged.
 
+**Fix evidence (branch `fix/core-008-share-orientation`):** Every encoded copy now comes from
+an ImageIO thumbnail with transform, capped at 3000 px and never upscaled; a failed
+thumbnail uses the unchanged-bytes fallback. `scripts/check-folder-lifecycle.sh` covers
+orientations 1-8 and none at 2400, 3000 and 4000 px longest edge (asymmetric corner-colour
+JPEGs, independent expected table, pixel sampling). Before the fix 14 checks failed
+(orientations 2-8 at 2400 and 3000); after it all pass. `LIFECYCLE_MUTANT=orientation`
+failed 21 checks. Debug build succeeded. Messages display on Intel and Apple Silicon is
+pending the final CORE hardware pass.
+
 ## CORE-009: Partially Filled Guest Grid
 
 **Owner:** [GuestView.swift](../PhotoBoothAttract/GuestView.swift#L62).
