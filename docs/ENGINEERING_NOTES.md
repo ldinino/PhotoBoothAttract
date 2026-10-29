@@ -337,6 +337,24 @@ draft and close the sheet regardless of print failure. No printer operation was 
 Preserve Print & Digital, Print only and Digital only as distinct actions. Use simulated
 failure for automated checks; a queued job does not establish a physical print.
 
+**Status: code fix on `fix/core-007-print-failure`; PR open, final CORE hardware validation pending.**
+`ActionSinks.print` now returns the print result and `PhotoModel.perform` completes with
+`PhotoSourceError.printFailed` before any share when it is false. In `PhoneNumberSheet`, both
+submit routes ignore repeat submission while pending, dismiss only on success or a source error,
+and on print failure keep the sheet, photo and recipient with an assistant-only message for
+explicit retry or cancel. Print only shows an alert and is disabled while pending.
+
+**Evidence:** `scripts/check-folder-lifecycle.sh` passes 170 checks (162 existing, 8 new):
+success ordering, failure with and without recipient, retry with identical bytes, Print only
+success/failure, Digital only never printing, and source rejection running no sink. Ignoring the
+print result fails 4 of the new checks; restored code passes all. The brief's Debug `xcodebuild`
+succeeds. Stub sinks only; no printer, Messages or app window was exercised.
+
+**Pending (final CORE hardware pass):** with an unavailable printer on Intel/TV and Apple
+Silicon, confirm an assistant-only error, no draft and a retained request. After explicit
+authorization, check configured-printer 4x6 output and matching addressed/unaddressed drafts;
+never press Send. Record per-case PASS/FAIL/SKIP, sanitized model and exact OS.
+
 ## CORE-008: Share Image Orientation
 
 **Owner:** [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift#L113).

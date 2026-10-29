@@ -194,6 +194,7 @@ struct AssistantView: View {
         .animation(.easeInOut(duration: 0.25), value: photoManager.isClearing)
         .sheet(item: $sheetRequest) { request in
             PhoneNumberSheet(
+                requestID: request.id,
                 photo: request.photo,
                 shouldPrint: request.shouldPrint,
                 phoneNumber: $phoneNumber,
@@ -224,9 +225,14 @@ struct AssistantView: View {
     }
 
     private func reportFailure(_ error: PhotoSourceError) {
-        staleMessage = error == .changed
-            ? "This photo was replaced after you selected it. Nothing was printed or sent. Select it again."
-            : "This photo's file is no longer available. Nothing was printed or sent."
+        switch error {
+        case .changed:
+            staleMessage = "This photo was replaced after you selected it. Nothing was printed or sent. Select it again."
+        case .unavailable:
+            staleMessage = "This photo's file is no longer available. Nothing was printed or sent."
+        case .printFailed:
+            staleMessage = "The print could not be queued. Check the printer and try again."
+        }
         showStaleAlert = true
     }
 
@@ -271,6 +277,7 @@ struct AssistantPhotoRow: View {
     let rowWidth: CGFloat
     var onRequestSheet: (PhotoModel, Bool) -> Void
     var onFailure: (PhotoSourceError) -> Void
+    @State private var isPrinting = false
 
     private var isCompact: Bool { rowWidth < 460 }
     private var isWide: Bool { rowWidth >= 560 }
@@ -354,7 +361,11 @@ struct AssistantPhotoRow: View {
             .tint(.blue)
 
             Button(action: {
-                photo.perform(print: true, share: false) { if let error = $0 { onFailure(error) } }
+                isPrinting = true
+                photo.perform(print: true, share: false) {
+                    isPrinting = false
+                    if let error = $0 { onFailure(error) }
+                }
             }) {
                 VStack(spacing: 2) {
                     Text("🖨️")
@@ -370,6 +381,7 @@ struct AssistantPhotoRow: View {
             }
             .buttonStyle(.bordered)
             .tint(.orange)
+            .disabled(isPrinting)
 
             Button(action: { onRequestSheet(photo, false) }) {
                 VStack(spacing: 2) {
@@ -391,11 +403,14 @@ struct AssistantPhotoRow: View {
 }
 
 struct PhoneNumberSheet: View {
+    let requestID: UUID
     let photo: PhotoModel
     let shouldPrint: Bool
     @Binding var phoneNumber: String
     @Binding var sheetRequest: SheetRequest?
     var onFailure: (PhotoSourceError) -> Void
+    @State private var isPending = false
+    @State private var printFailed = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -412,25 +427,35 @@ struct PhoneNumberSheet: View {
                 .frame(width: 300)
                 .onSubmit { send() }
 
+            if printFailed {
+                Text("The print could not be queued, so no message draft was opened. Check the printer, then retry or cancel.")
+                    .font(.callout)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+            }
+
             HStack(spacing: 16) {
                 Button("Cancel") {
                     sheetRequest = nil
                 }
                 .keyboardShortcut(.cancelAction)
+                .disabled(isPending)
 
                 Button("Send without number") {
                     submit(recipient: nil)
                 }
+                .disabled(isPending)
 
                 Button("Send") {
                     send()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(isPending || phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
         .padding(30)
         .frame(width: 420)
+        .interactiveDismissDisabled(isPending)
     }
 
     private func send() {
@@ -440,9 +465,24 @@ struct PhoneNumberSheet: View {
     }
 
     private func submit(recipient: String?) {
-        sheetRequest = nil
-        photo.perform(print: shouldPrint, share: true, recipient: recipient) {
-            if let error = $0 { onFailure(error) }
+        guard !isPending else { return }
+        isPending = true
+        printFailed = false
+        photo.perform(print: shouldPrint, share: true, recipient: recipient) { error in
+            isPending = false
+            switch error {
+            case nil:
+                dismissIfCurrent()
+            case .printFailed:
+                printFailed = true
+            case .some(let error):
+                dismissIfCurrent()
+                onFailure(error)
+            }
         }
+    }
+
+    private func dismissIfCurrent() {
+        if sheetRequest?.id == requestID { sheetRequest = nil }
     }
 }
