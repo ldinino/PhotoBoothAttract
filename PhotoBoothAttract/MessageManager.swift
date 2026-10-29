@@ -112,28 +112,26 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
     /// Produces a JPEG copy sized for MMS (≤ targetFileSizeBytes) at the highest quality that fits.
     private func compressedCopy(of data: Data, name: String, in directory: URL) -> URL? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let pixelWidth = props[kCGImagePropertyPixelWidth] as? Int,
+              let pixelHeight = props[kCGImagePropertyPixelHeight] as? Int else {
             ErrorLog.shared.log("MessageManager: Could not read source image for compression")
             return nil
         }
-
-        let maxDim = Self.maxPixelSize
-        let needsDownscale = cgImage.width > maxDim || cgImage.height > maxDim
 
         let destURL = directory
             .appendingPathComponent((name as NSString).deletingPathExtension + "_send")
             .appendingPathExtension("jpg")
 
-        var finalImage: CGImage = cgImage
-        if needsDownscale {
-            let thumbOpts: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxDim
-            ]
-            if let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOpts as CFDictionary) {
-                finalImage = thumb
-            }
+        // The thumbnail bakes EXIF orientation into pixels (the encoder writes no tag); never upscales.
+        let thumbOpts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: min(max(pixelWidth, pixelHeight), Self.maxPixelSize)
+        ]
+        guard let finalImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOpts as CFDictionary) else {
+            ErrorLog.shared.log("MessageManager: Could not orient source image for compression")
+            return nil
         }
 
         // Try initial quality; if already under target, we're done.

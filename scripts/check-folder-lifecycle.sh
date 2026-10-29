@@ -11,6 +11,7 @@
 # scan completion ends the new busy state.
 # LIFECYCLE_MUTANT=clearaccess|clearempty: access errors count as gone | empty clear wipes the list.
 # LIFECYCLE_MUTANT=attachment: CORE-003 attachments share the temp directory (deterministic paths).
+# LIFECYCLE_MUTANT=orientation: CORE-008 shares skip orientation normalization.
 # LIFECYCLE_MUTANT=clearsuccess|clearhide: CORE-005 clear always reports success | failed deletions lose their rows.
 set -euo pipefail
 
@@ -44,6 +45,7 @@ export ATTACH_ROOT="$WORK/attach/tmp"; mkdir -p "$ATTACH_ROOT"
 sed -E 's/private (func|var|let)/\1/; s|FileManager.default.temporaryDirectory|URL(fileURLWithPath: "'"$WORK"'/attach/tmp", isDirectory: true)|' "$SRC/MessageManager.swift" > "$WORK/MessageManager.swift"
 case "${LIFECYCLE_MUTANT:-}" in
     attachment) sed -i '' '/PhotoBoothAttract-messages/d; /UUID().uuidString, isDirectory: true)/d' "$WORK/MessageManager.swift" ;;
+    orientation) sed -i '' 's/kCGImageSourceCreateThumbnailWithTransform: true/kCGImageSourceCreateThumbnailWithTransform: false/' "$WORK/MessageManager.swift" ;;
 esac
 case "${LIFECYCLE_MUTANT:-}" in
     url) sed -i '' 's/SHA256.hash(data: data) == digest ? /true ? /' "$WORK/PhotoModel.swift" ;;
@@ -688,6 +690,67 @@ check("attachments: cleanup removes only the request directory", !atfm.fileExist
 try? atfm.removeItem(at: atkeep)
 for u in [ata1, atb1, ata2, atf1, atf2, atc3] { try? atfm.removeItem(at: u.deletingLastPathComponent()) }
 try? atfm.removeItem(at: srcDir)
+
+// CORE-008: shared JPEGs show the same orientation as the original at any size
+// Stored corners: 0=TL red, 1=TR green, 2=BL blue, 3=BR yellow. Independent table of the stored corner
+// shown at displayed TL, TR, BL, BR for EXIF orientations 1-8.
+let oriTable: [Int: [Int]] = [1: [0, 1, 2, 3], 2: [1, 0, 3, 2], 3: [3, 2, 1, 0], 4: [2, 3, 0, 1],
+                              5: [0, 2, 1, 3], 6: [2, 0, 3, 1], 7: [3, 1, 2, 0], 8: [1, 3, 0, 2]]
+let oriColors: [[Int]] = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]]
+func oriJPEG(_ w: Int, _ h: Int, orientation: Int?) -> Data {
+    let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    for (i, c) in oriColors.enumerated() {   // CGContext origin is bottom-left
+        ctx.setFillColor(red: CGFloat(c[0]) / 255, green: CGFloat(c[1]) / 255, blue: CGFloat(c[2]) / 255, alpha: 1)
+        ctx.fill(CGRect(x: (i % 2) * w / 2, y: (i < 2 ? h / 2 : 0), width: w / 2, height: h / 2))
+    }
+    let out = NSMutableData()
+    let dest = CGImageDestinationCreateWithData(out, "public.jpeg" as CFString, 1, nil)!
+    var props: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.95]
+    if let orientation { props[kCGImagePropertyOrientation] = orientation }
+    CGImageDestinationAddImage(dest, ctx.makeImage()!, props as CFDictionary)
+    precondition(CGImageDestinationFinalize(dest))
+    return out as Data
+}
+func oriSample(_ url: URL) -> (w: Int, h: Int, tag: Int, corners: [Int])? {
+    guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
+    let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any]
+    let tag = (props?[kCGImagePropertyOrientation] as? Int) ?? 1
+    let w = img.width, h = img.height
+    var px = [UInt8](repeating: 0, count: w * h * 4)
+    let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+    var corners: [Int] = []
+    for (qx, qy) in [(1, 1), (3, 1), (1, 3), (3, 3)] {   // quadrant centres, top row first
+        let o = ((qy * h / 4) * w + qx * w / 4) * 4
+        let p = [Int(px[o]), Int(px[o + 1]), Int(px[o + 2])]
+        let d = oriColors.map { c in zip(c, p).reduce(0) { $0 + abs($1.0 - $1.1) } }
+        corners.append(d.min()! < 90 ? d.firstIndex(of: d.min()!)! : -1)
+    }
+    return (w, h, tag, corners)
+}
+let oriDir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ATTACH_ROOT"]!).deletingLastPathComponent().appendingPathComponent("orisrc", isDirectory: true)
+try! atfm.createDirectory(at: oriDir, withIntermediateDirectories: true)
+for longest in [2400, 3000, 4000] {
+    let w = longest, h = longest / 2
+    let expLong = min(longest, 3000)
+    for orientation in [nil] + Array(1...8).map { Optional($0) } {
+        let o = orientation ?? 1
+        let src = oriJPEG(w, h, orientation: orientation)
+        let srcFile = oriDir.appendingPathComponent("o\(orientation ?? 0)_\(longest).jpg")
+        try! src.write(to: srcFile)
+        let url = atmm.attachmentURL(for: src, name: srcFile.lastPathComponent)!
+        let r = oriSample(url)
+        let swap = o >= 5
+        let ew = swap ? expLong / 2 : expLong, eh = swap ? expLong : expLong / 2
+        let label = "orientation \(orientation.map(String.init) ?? "none") longest \(longest)"
+        check("share \(label): size, pixel placement and no leftover tag",
+              r != nil && abs(r!.w - ew) <= 1 && abs(r!.h - eh) <= 1 && r!.tag == 1 && r!.corners == oriTable[o]!)
+        check("share \(label): original bytes unchanged", (try? Data(contentsOf: srcFile)) == src)
+        try? atfm.removeItem(at: url.deletingLastPathComponent())
+    }
+}
+try? atfm.removeItem(at: oriDir)
 
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
