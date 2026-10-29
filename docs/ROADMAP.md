@@ -7,10 +7,10 @@ This roadmap is planned work, not release history or a claim that fixes have shi
 
 **Status:** In progress. CORE-001, CORE-002, CORE-004 and CORE-006 are closed; five items in [BUGS.md](BUGS.md) remain open.
 
-**Next implementation:** CORE-008 share-image orientation. CORE-003 and CORE-005 code fixes are merged;
-their device checks remain pending. Finish the remaining code fixes before requesting another Intel/TV
-pass. Hardware validation is batched at the end of CORE; pending device evidence stays explicit and does
-not block the next implementation task.
+**Next implementation:** CORE-007 print-failure handling. CORE-003, CORE-005 and CORE-008 code fixes
+are merged; their device checks remain pending. Finish the remaining code fixes before requesting
+another Intel/TV pass. Hardware validation is batched at the end of CORE; pending device evidence stays
+explicit and does not block the next implementation task.
 
 1. Stabilize folder lifecycle and photo identity first: CORE-001 and CORE-002. Then cover filesystem events and move scans off the UI thread: CORE-004 and CORE-006.
 2. Fix clear-folder reporting, attachment isolation, orientation and print-failure handling: CORE-005, CORE-003, CORE-008 and CORE-007.

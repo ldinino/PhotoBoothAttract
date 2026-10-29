@@ -339,23 +339,31 @@ failure for automated checks; a queued job does not establish a physical print.
 
 ## CORE-008: Share Image Orientation
 
-**Owner:** [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift#L93).
+**Owner:** [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift#L113).
 
 **Evidence:** A small synthetic JPEG with EXIF orientation 6 was compressed. The output
 kept the unrotated pixel dimensions instead of the transformed dimensions. Orientation
-is currently applied only when generating a downscaled thumbnail above 3000 pixels.
+was applied only when generating a downscaled thumbnail above 3000 pixels.
 
 **Acceptance:** Shared copies preserve visible orientation below, at and above the
 downscaling threshold. Cover rotated and mirrored EXIF orientations. Originals stay unchanged.
 
-**Fix evidence (branch `fix/core-008-share-orientation`):** Every encoded copy now comes from
+**Status: code fix merged in PR #8 (`e602762`); final CORE hardware validation pending.** Every encoded copy comes from
 an ImageIO thumbnail with transform, capped at 3000 px and never upscaled; a failed
 thumbnail uses the unchanged-bytes fallback. `scripts/check-folder-lifecycle.sh` covers
 orientations 1-8 and none at 2400, 3000 and 4000 px longest edge (asymmetric corner-colour
-JPEGs, independent expected table, pixel sampling). Before the fix 14 checks failed
-(orientations 2-8 at 2400 and 3000); after it all pass. `LIFECYCLE_MUTANT=orientation`
-failed 21 checks. Debug build succeeded. Messages display on Intel and Apple Silicon is
-pending the final CORE hardware pass.
+JPEGs, independent expected table, pixel sampling). Staff reported 14 pre-fix failures
+(orientations 2-8 at 2400 and 3000).
+
+**Independent review (2026-10-28, head `fba2c26`):** shell syntax and diff checks pass;
+normal and restored suites each pass 162 checks, including 54 new share checks.
+`LIFECYCLE_MUTANT=orientation` fails exactly 21 behavioral checks. The Debug build succeeds;
+updated main at `e602762` also passes all 162 checks. No app UI, printing or Messages was
+invoked, and release packaging was not run.
+
+**Pending (final CORE hardware pass):** separately authorized rotated and mirrored Messages
+draft checks on Intel and Apple Silicon, through recipient and recipient-free routes.
+Decoded-file checks do not establish Messages display behavior; never press Send during validation.
 
 ## CORE-009: Partially Filled Guest Grid
 
