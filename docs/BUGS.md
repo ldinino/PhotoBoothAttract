@@ -20,7 +20,7 @@ and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until cor
 
 ## Low Priority
 
-- [ ] **CORE-009: Shifting partial grid.** With one photo, the guest tile is centered instead of occupying the top-left quadrant. **Reproduced by offscreen rendering.** Code fix on `fix/core-009-partial-guest-grid`; 128 render checks, 170 regression checks and Debug build pass. **Intel/Apple Silicon display qualification deferred to the final CORE hardware pass.** [Notes](ENGINEERING_NOTES.md#core-009-partially-filled-guest-grid)
+- [ ] **CORE-009: Shifting partial grid.** Code fix merged in PR #10 (`d635b21`); 193 independent native guest/assistant checks, 170 regression checks and Debug build pass. **Intel/Apple Silicon display qualification deferred to the final CORE hardware pass.** [Notes](ENGINEERING_NOTES.md#core-009-partially-filled-guest-grid)
 
 ## Closing Items
 

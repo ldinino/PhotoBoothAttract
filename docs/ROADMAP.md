@@ -7,14 +7,14 @@ This roadmap is planned work, not release history or a claim that fixes have shi
 
 **Status:** In progress. CORE-001, CORE-002, CORE-004 and CORE-006 are closed; five items in [BUGS.md](BUGS.md) remain open.
 
-**Next implementation:** CORE-009 stable partial guest grid. CORE-003, CORE-005, CORE-007 and CORE-008 code fixes
-are merged; their device checks remain pending. Finish the remaining code fixes before requesting
-another Intel/TV pass. Hardware validation is batched at the end of CORE; pending device evidence stays
-explicit and does not block the next implementation task.
+**Next implementation:** Native CORE UI validation runner. All CORE code fixes are merged;
+CORE-003, CORE-005, CORE-007, CORE-008 and CORE-009 remain open for final device qualification.
+Implement the runner below before the batched Intel/TV and Apple Silicon pass. Pending device
+evidence stays explicit; the overall CORE gate is not complete.
 
 1. Stabilize folder lifecycle and photo identity first: CORE-001 and CORE-002. Then cover filesystem events and move scans off the UI thread: CORE-004 and CORE-006.
 2. Fix clear-folder reporting, attachment isolation, orientation and print-failure handling: CORE-005, CORE-003, CORE-008 and CORE-007.
-3. Fix the partial guest grid: CORE-009 (code fix in review; device checks pending). Exercise the assistant buttons, matching badges and display lifecycle end to end.
+3. Fix the partial guest grid: CORE-009 (merged in PR #10; device checks pending). Exercise the assistant buttons, matching badges and display lifecycle end to end.
 4. Tidy the touched core code as the fixes land. Remove dead paths and misleading helpers; prefer direct names and small, testable logic. Do not turn cleanup into an architecture rewrite or a visual redesign.
 
 ### Required Before Leaving CORE

@@ -404,7 +404,7 @@ image showed the tile centered, leaving the intended top-left cell location empt
 the top-left cell, followed by 2 top-right, 3 bottom-left and 4 bottom-right. Verify partial
 grids and arrival of a fifth photo; assistant badges must identify the same images.
 
-**Status: code fix in PR #10; final CORE hardware validation pending.**
+**Status: code fix merged in PR #10 (`d635b21`); final CORE hardware validation pending.**
 `GuestView` now places each of the first four `photoManager.photos` in a fixed
 quadrant-sized slot (1 top-left, 2 top-right, 3 bottom-left, 4 bottom-right). Unused slots stay
 black; the empty waiting message is unchanged. Ordering is untouched, and the assistant list
@@ -419,6 +419,17 @@ and 3 photos leave quadrant 1 and 3 black); the fixed view passes all 128. Shell
 all 170 regression checks and the actual Debug `xcodebuild` pass (macOS 26.7.1 host). The
 assistant badge UI was not rendered; its identity relies on the shared array order. The harness
 is an isolated view, not a full app launch.
+
+**Independent review (2026-10-28, head `f107f45`):** every shell script passes syntax checking;
+diff and local-link checks, all 170 regression checks and the actual Debug build pass. A disposable
+native-window harness compiled unchanged `GuestView`, `AssistantView` and `PhotoModel` source with
+a stub `PhotoManager`. All 193 checks pass for counts 0-5 at 800x600 and 1280x720, arrivals,
+newest/middle removal and live resize through 640x480. Guest pixels are sampled near both sides of
+each quadrant against decoded fixture colours; actual assistant badge labels are associated with
+filenames by native Accessibility positions. Synthetic guest and assistant screenshots were inspected.
+The pre-fix view fails 20 quadrant checks; the correct view and merged main each pass all 193.
+No full app launch, printer or Messages was invoked. Permanent native coverage remains part of
+the final CORE UI runner; these checks do not qualify physical display placement or older hardware.
 
 **Pending hardware (final CORE batch), record PASS/FAIL/SKIP with sanitized model and exact OS:**
 1. On Intel/TV and Apple Silicon, show 0-5 synthetic photos; confirm fixed quadrants, newest-first
