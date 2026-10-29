@@ -586,6 +586,7 @@ func nativeCases() {
 
         stub.reset()
         let rows = nodes(window, "Digital Only", role: kAXButtonRole).sorted { $0.frame.minY < $1.frame.minY }
+        guard rows.count > 2 else { failures.append("expected 3 'Digital Only' buttons, found \(rows.count)"); host.close(); return }
         let rowB = rows[2].object
         press(window, "Digital Only", index: 0)
         waitFor("sheet A", 4) { window.attachedSheet != nil && hasText(window, "photo-3-blue.jpg") }
@@ -769,6 +770,12 @@ if let appPath {
     if appInfo == nil { say("ABORT: \(appPath) is not an app bundle (no Contents/Info.plist)."); cleanup(); exit(3) }
 }
 
+let knownCases = (1...11).map { String(format: "N%02d", $0) } + (1...4).map { "A0\($0)" } + (1...4).map { "S\($0)" }
+if let only = option("--only") {
+    let unknown = only.split(separator: ",").map(String.init).filter { !knownCases.contains($0) }
+    if only.isEmpty || !unknown.isEmpty { print("ABORT: unknown case id(s) \(unknown.isEmpty ? "(empty)" : unknown.joined(separator: ", ")). Known: \(knownCases.joined(separator: " "))"); cleanup(); exit(3) }
+}
+
 say("PhotoBoothAttract CORE UI runner")
 environmentReport(appInfo: appInfo)
 say("Isolation: runner preferences domain '\(ProcessInfo.processInfo.processName)'; fixtures under an owned temporary root; app cases use a copy with its own bundle identifier and HOME")
@@ -789,5 +796,10 @@ say("Manual checks NOT performed by this runner:")
 manualChecks.forEach { say("  - \($0)") }
 let verdict = fails > 0 ? "FAILED" : skips > 0 ? "INCOMPLETE (skipped cases are not passes)" : "all automated cases passed; manual checks still pending"
 say("Result: \(verdict)")
-if let reportPath { try? reportLines.joined(separator: "\n").write(toFile: reportPath, atomically: true, encoding: .utf8) }
+if let reportPath {
+    do { try reportLines.joined(separator: "\n").write(toFile: reportPath, atomically: true, encoding: .utf8) } catch {
+        print("ERROR: could not write the report: \(error.localizedDescription)")
+        exit(3)
+    }
+}
 exit(fails > 0 ? 1 : skips > 0 ? 2 : 0)

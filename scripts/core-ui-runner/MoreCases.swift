@@ -200,7 +200,9 @@ final class AppInstance {
         try? FileManager.default.createDirectory(at: root.appendingPathComponent("tmp"), withIntermediateDirectories: true)
         do { try p.run() } catch { failures.append("could not launch the app: \(error.localizedDescription)"); return false }
         process = p; ownedProcess = p
-        return waitFor("app window appears", 20) { !windows().isEmpty }
+        if waitFor("app window appears", 20, { !windows().isEmpty }) { return true }
+        quit()
+        return false
     }
 
     func windows() -> [(title: String, frame: CGRect?)] {
