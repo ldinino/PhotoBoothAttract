@@ -326,29 +326,39 @@ core acceptance gate remains open. Raw hardware/system reports and device identi
 
 ## CORE-007: Print and Digital Failure Handling
 
-**Owner:** [AssistantView.swift](../PhotoBoothAttract/AssistantView.swift#L419),
-with the same pattern in the no-number action. [PrintManager.swift](../PhotoBoothAttract/PrintManager.swift#L29)
-already offers a completion result.
+**Owner:** [PhotoModel.swift](../PhotoBoothAttract/PhotoModel.swift),
+[AssistantView.swift](../PhotoBoothAttract/AssistantView.swift) and
+[PrintManager.swift](../PhotoBoothAttract/PrintManager.swift).
 
-**Evidence:** Source inspection shows callers discard that result, open a Messages
-draft and close the sheet regardless of print failure. No printer operation was run.
+**Baseline evidence:** Source inspection showed callers discarding the print result, opening a Messages
+draft and closing the sheet regardless of print failure. No printer operation was run.
 
 **Acceptance:** Surface a failed print instead of implying the combined action succeeded.
 Preserve Print & Digital, Print only and Digital only as distinct actions. Use simulated
 failure for automated checks; a queued job does not establish a physical print.
 
-**Status: code fix on `fix/core-007-print-failure`; PR open, final CORE hardware validation pending.**
+**Status: code fix merged in PR #9 (`0f8b0b3`); final CORE hardware validation pending.**
 `ActionSinks.print` now returns the print result and `PhotoModel.perform` completes with
 `PhotoSourceError.printFailed` before any share when it is false. In `PhoneNumberSheet`, both
 submit routes ignore repeat submission while pending, dismiss only on success or a source error,
 and on print failure keep the sheet, photo and recipient with an assistant-only message for
-explicit retry or cancel. Print only shows an alert and is disabled while pending.
+explicit retry or cancel. Cancel, Escape and interactive dismissal are disabled while pending;
+completion dismisses only its own current request. Print only shows an alert and is disabled while pending.
 
-**Evidence:** `scripts/check-folder-lifecycle.sh` passes 170 checks (162 existing, 8 new):
+**Staff checks:** `scripts/check-folder-lifecycle.sh` passes 170 checks (162 existing, 8 new):
 success ordering, failure with and without recipient, retry with identical bytes, Print only
 success/failure, Digital only never printing, and source rejection running no sink. Ignoring the
 print result fails 4 of the new checks; restored code passes all. The brief's Debug `xcodebuild`
-succeeds. Stub sinks only; no printer, Messages or app window was exercised.
+succeeds. Stub sinks only; no printer, Messages or app window was exercised in that pass.
+
+**Independent review (2026-10-28, head `e61894a`):** shell syntax and diff checks pass;
+all 170 regression checks and the actual Debug build pass. A disposable native-sheet harness
+compiled the unchanged `AssistantView.swift` with non-I/O test doubles. All 26 checks pass,
+including pending Cancel/Escape, duplicate submission, failure retention, retry, source errors,
+Digital only and a new request surviving an older success/error completion. Removing only the
+request-identity guard in a temporary copy fails 6 checks; the correct source passes all 26 again.
+The event app, printer and Messages were not invoked. Permanent native lifecycle automation
+remains part of the final CORE UI runner, not a pure UUID-comparison helper.
 
 **Pending (final CORE hardware pass):** with an unavailable printer on Intel/TV and Apple
 Silicon, confirm an assistant-only error, no draft and a retained request. After explicit

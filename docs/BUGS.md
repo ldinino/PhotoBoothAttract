@@ -15,7 +15,7 @@ and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until cor
 - [x] **CORE-004: Missing filesystem events.** Fixed in PR #3 (`6fe6bde`). Automated checks, live FSEvents, Debug build and isolated real-window updates pass. [Notes](ENGINEERING_NOTES.md#core-004-filesystem-event-coverage)
 - [ ] **CORE-005: Clear-folder failures.** Fixed in PR #6 (`93e1746`); 101 checks, Debug build and local confirmation/result-alert checks pass. **Intel/TV clear qualification deferred to the final CORE hardware pass.** [Notes](ENGINEERING_NOTES.md#core-005-clear-folder-failure-reporting)
 - [x] **CORE-006: Blocking initial scan.** Fixed in PR #5 (`6960a86`). 90 automated checks, Debug/universal Release builds and maintainer-reported Intel/guest-display checks pass (2026-10-28). [Notes](ENGINEERING_NOTES.md#core-006-initial-scan-blocks-the-ui)
-- [ ] **CORE-007: Ignored print failure.** Print & Digital opens the draft and dismisses the sheet regardless of the print result. **Source-confirmed; no print attempted.** [Notes](ENGINEERING_NOTES.md#core-007-print-and-digital-failure-handling)
+- [ ] **CORE-007: Ignored print failure.** Code fix merged in PR #9 (`0f8b0b3`); 170 regression checks, 26 native-sheet checks and Debug build pass. **Printer and Intel/Apple Silicon qualification deferred to the final CORE hardware pass.** [Notes](ENGINEERING_NOTES.md#core-007-print-and-digital-failure-handling)
 - [ ] **CORE-008: Lost photo orientation.** Code fix merged in PR #8 (`e602762`); 162 checks and Debug build pass. **Messages orientation checks on Intel and Apple Silicon deferred to the final CORE hardware pass.** [Notes](ENGINEERING_NOTES.md#core-008-share-image-orientation)
 
 ## Low Priority

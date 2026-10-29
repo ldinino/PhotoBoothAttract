@@ -7,7 +7,7 @@ This roadmap is planned work, not release history or a claim that fixes have shi
 
 **Status:** In progress. CORE-001, CORE-002, CORE-004 and CORE-006 are closed; five items in [BUGS.md](BUGS.md) remain open.
 
-**Next implementation:** CORE-007 print-failure handling. CORE-003, CORE-005 and CORE-008 code fixes
+**Next implementation:** CORE-009 stable partial guest grid. CORE-003, CORE-005, CORE-007 and CORE-008 code fixes
 are merged; their device checks remain pending. Finish the remaining code fixes before requesting
 another Intel/TV pass. Hardware validation is batched at the end of CORE; pending device evidence stays
 explicit and does not block the next implementation task.
@@ -20,7 +20,8 @@ explicit and does not block the next implementation task.
 ### Required Before Leaving CORE
 
 - [ ] **Native UI validation runner and final hardware pass.** After the fixes, provide a script that
-	drives the agreed CORE UI flows with synthetic fixtures and isolated preferences. Emit per-case
+	drives the agreed CORE UI flows with synthetic fixtures and isolated preferences, including pending
+	cancellation and request-scoped sheet completion. Emit per-case
 	PASS/FAIL/SKIP, a summary and a failing exit code for failures; skipped/manual checks are not passes.
 	Use state-based waits, preserve event settings, restore permissions and remove fixtures, and close
 	only app instances launched by the runner. Run the final pass on the older Intel Mac with the TV
