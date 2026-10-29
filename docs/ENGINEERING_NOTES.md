@@ -404,6 +404,27 @@ image showed the tile centered, leaving the intended top-left cell location empt
 the top-left cell, followed by 2 top-right, 3 bottom-left and 4 bottom-right. Verify partial
 grids and arrival of a fifth photo; assistant badges must identify the same images.
 
+**Status: code fix in PR #10; final CORE hardware validation pending.**
+`GuestView` now places each of the first four `photoManager.photos` in a fixed
+quadrant-sized slot (1 top-left, 2 top-right, 3 bottom-left, 4 bottom-right). Unused slots stay
+black; the empty waiting message is unchanged. Ordering is untouched, and the assistant list
+numbers the same array by index.
+
+**Staff checks:** A disposable native harness compiled the real `GuestView.swift` and
+`PhotoModel.swift` with a stub `PhotoManager`, rendered synthetic solid-colour photos in a hosting
+view and sampled each quadrant. 128 checks pass at 800x600 and 1280x720: counts 0-5, arrivals
+(a fifth arrival becomes 1 and the oldest drops), removal of newest and middle, and live window
+resize to 800x600, 1280x720 and 640x480. The pre-fix view fails the same harness (for example 1
+and 3 photos leave quadrant 1 and 3 black); the fixed view passes all 128. Shell syntax checks,
+all 170 regression checks and the actual Debug `xcodebuild` pass (macOS 26.7.1 host). The
+assistant badge UI was not rendered; its identity relies on the shared array order. The harness
+is an isolated view, not a full app launch.
+
+**Pending hardware (final CORE batch), record PASS/FAIL/SKIP with sanitized model and exact OS:**
+1. On Intel/TV and Apple Silicon, show 0-5 synthetic photos; confirm fixed quadrants, newest-first
+   numbering and matching assistant badges.
+2. Resize and reconnect the guest display; confirm framing and unchanged single-display fallback.
+
 ## Verification Conventions
 
 Use the actual Xcode project and [build workflow](../scripts/build-run.sh).
