@@ -14,7 +14,7 @@ explicit and does not block the next implementation task.
 
 1. Stabilize folder lifecycle and photo identity first: CORE-001 and CORE-002. Then cover filesystem events and move scans off the UI thread: CORE-004 and CORE-006.
 2. Fix clear-folder reporting, attachment isolation, orientation and print-failure handling: CORE-005, CORE-003, CORE-008 and CORE-007.
-3. Fix the partial guest grid: CORE-009. Exercise the assistant buttons, matching badges and display lifecycle end to end.
+3. Fix the partial guest grid: CORE-009 (code fix in review; device checks pending). Exercise the assistant buttons, matching badges and display lifecycle end to end.
 4. Tidy the touched core code as the fixes land. Remove dead paths and misleading helpers; prefer direct names and small, testable logic. Do not turn cleanup into an architecture rewrite or a visual redesign.
 
 ### Required Before Leaving CORE

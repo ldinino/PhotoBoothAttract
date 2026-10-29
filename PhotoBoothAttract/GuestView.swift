@@ -59,27 +59,11 @@ struct GuestView: View {
                         .font(.system(size: 40, weight: .bold))
                         .foregroundColor(.gray)
                 } else {
-                    VStack(spacing: 0) {
-                        HStack(spacing: 0) {
-                            if topFour.count > 0 {
-                                GuestPhotoCell(photo: topFour[0], number: 1)
-                                    .frame(width: cellWidth, height: cellHeight)
-                            }
-                            if topFour.count > 1 {
-                                GuestPhotoCell(photo: topFour[1], number: 2)
-                                    .frame(width: cellWidth, height: cellHeight)
-                            }
-                        }
-                        HStack(spacing: 0) {
-                            if topFour.count > 2 {
-                                GuestPhotoCell(photo: topFour[2], number: 3)
-                                    .frame(width: cellWidth, height: cellHeight)
-                            }
-                            if topFour.count > 3 {
-                                GuestPhotoCell(photo: topFour[3], number: 4)
-                                    .frame(width: cellWidth, height: cellHeight)
-                            }
-                        }
+                    ForEach(Array(topFour.enumerated()), id: \.element.id) { index, photo in
+                        GuestPhotoCell(photo: photo, number: index + 1)
+                            .frame(width: cellWidth, height: cellHeight)
+                            .position(x: cellWidth * (CGFloat(index % 2) + 0.5),
+                                      y: cellHeight * (CGFloat(index / 2) + 0.5))
                     }
                 }
             }
