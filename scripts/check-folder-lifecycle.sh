@@ -332,10 +332,10 @@ func bytes(_ color: NSColor) -> Data {
     png(t, color: color); defer { try? FileManager.default.removeItem(at: t) }
     return try! Data(contentsOf: t)
 }
-final class Rec { var prints: [Data] = []; var shares: [(Data, String?)] = []; var onPrint: (() -> Void)?; var allOnMain = true }
+final class Rec { var prints: [Data] = []; var shares: [(Data, String?)] = []; var onPrint: (() -> Void)?; var allOnMain = true; var printSucceeds = true; var order: [String] = [] }
 func sinks(_ r: Rec) -> ActionSinks {
-    ActionSinks(print: { d, _ in r.allOnMain = r.allOnMain && Thread.isMainThread; r.prints.append(d); r.onPrint?() },
-                share: { d, _, who in r.allOnMain = r.allOnMain && Thread.isMainThread; r.shares.append((d, who)) })
+    ActionSinks(print: { d, _ in r.allOnMain = r.allOnMain && Thread.isMainThread; r.prints.append(d); r.order.append("print"); r.onPrint?(); return r.printSucceeds },
+                share: { d, _, who in r.allOnMain = r.allOnMain && Thread.isMainThread; r.shares.append((d, who)); r.order.append("share") })
 }
 func act(_ p: PhotoModel, print: Bool, share: Bool, recipient: String? = nil, _ r: Rec) -> PhotoSourceError? {
     var done = false, err: PhotoSourceError?
@@ -461,6 +461,18 @@ spin(0.4)
 check("main run loop stays responsive and nothing is output while the read is pending", ticks >= 5 && !doneF && recF.prints.count == beforeSinks)
 waitUntil(5) { doneF }; timer.invalidate()
 check("delayed read outputs the selected snapshot on the main thread", resultF == nil && recF.prints.map(tint) == ["red"] && recF.allOnMain)
+
+// CORE-007: print failure stops the combined action; Digital only never prints
+let recOk = Rec(), recBad = Rec(), recBad2 = Rec(), recPo = Rec(), recPf = Rec(), recDo = Rec(), recRej = Rec()
+recBad.printSucceeds = false; recBad2.printSucceeds = false; recPf.printSucceeds = false
+check("print success then share, addressed, on main", act(f1, print: true, share: true, recipient: "+15550100", recOk) == nil && recOk.order == ["print", "share"] && recOk.shares.first?.1 == "+15550100" && recOk.allOnMain)
+check("print failure with recipient: no draft, reported as printFailed", act(f1, print: true, share: true, recipient: "+15550100", recBad) == .printFailed && recBad.order == ["print"] && recBad.shares.isEmpty && recBad.allOnMain)
+check("print failure without recipient: no draft", act(f1, print: true, share: true, recBad2) == .printFailed && recBad2.order == ["print"] && recBad2.shares.isEmpty)
+check("retry after failure prints and shares the same bytes once", { recBad.printSucceeds = true; return act(f1, print: true, share: true, recipient: "+15550100", recBad) == nil && recBad.order == ["print", "print", "share"] && recBad.prints[0] == recBad.prints[1] && recBad.shares[0].0 == recBad.prints[0] }())
+check("print only failure is reported", act(f1, print: true, share: false, recPf) == .printFailed && recPf.shares.isEmpty)
+check("print only success is reported as no error", act(f1, print: true, share: false, recPo) == nil && recPo.order == ["print"])
+check("digital only never prints even if printing would fail", { recDo.printSucceeds = false; return act(f1, print: false, share: true, recipient: nil, recDo) == nil && recDo.order == ["share"] }())
+check("source rejection runs no sink", { try? FileManager.default.removeItem(at: fo); return act(f1, print: true, share: true, recRej) == .unavailable && recRej.order.isEmpty }())
 
 // CORE-004: filesystem events. Flags are only a hint; the file's current state decides.
 let fl = { (f: Int) in UInt32(f) }

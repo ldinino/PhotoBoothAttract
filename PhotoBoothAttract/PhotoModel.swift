@@ -14,15 +14,21 @@ enum PhotoSourceError: Error {
     /// The file no longer holds the bytes this photo was created from.
     case changed
     case unavailable
+    /// The print sink reported failure; nothing was shared.
+    case printFailed
 }
 
 /// Where a photo's bytes go. Injected so action preparation can be exercised without printing or Messages.
 struct ActionSinks {
-    var print: (Data, String) -> Void
+    var print: (Data, String) -> Bool
     var share: (Data, String, String?) -> Void
 
     static let live = ActionSinks(
-        print: { PrintManager.shared.printPhoto(imageData: $0, name: $1) },
+        print: { data, name in
+            var succeeded = false
+            PrintManager.shared.printPhoto(imageData: data, name: name) { succeeded = $0 }
+            return succeeded
+        },
         share: { data, name, recipient in
             if let recipient {
                 MessageManager.shared.prepareDraft(imageData: data, name: name, phoneNumber: recipient)
@@ -92,7 +98,10 @@ struct PhotoModel: Identifiable {
                     completion(error)
                 case .success(let data):
                     let name = url.lastPathComponent
-                    if print { sinks.print(data, name) }
+                    if print, !sinks.print(data, name) {
+                        completion(.printFailed)
+                        return
+                    }
                     if share { sinks.share(data, name, recipient) }
                     completion(nil)
                 }
