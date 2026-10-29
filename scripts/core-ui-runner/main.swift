@@ -770,10 +770,14 @@ if let appPath {
     if appInfo == nil { say("ABORT: \(appPath) is not an app bundle (no Contents/Info.plist)."); cleanup(); exit(3) }
 }
 
-let knownCases = (1...11).map { String(format: "N%02d", $0) } + (1...4).map { "A0\($0)" } + (1...4).map { "S\($0)" }
+let knownCases = selfTest ? (1...4).map { "S\($0)" } : (1...11).map { String(format: "N%02d", $0) } + (1...4).map { "A0\($0)" }
 if let only = option("--only") {
-    let unknown = only.split(separator: ",").map(String.init).filter { !knownCases.contains($0) }
-    if only.isEmpty || !unknown.isEmpty { print("ABORT: unknown case id(s) \(unknown.isEmpty ? "(empty)" : unknown.joined(separator: ", ")). Known: \(knownCases.joined(separator: " "))"); cleanup(); exit(3) }
+    let tokens = only.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+    let bad = tokens.filter { !knownCases.contains($0) }
+    if !bad.isEmpty {
+        print("ABORT: invalid case id(s) [\(bad.joined(separator: ", "))]. Valid\(selfTest ? " with --self-test" : ""): \(knownCases.joined(separator: " "))")
+        cleanup(); exit(3)
+    }
 }
 
 say("PhotoBoothAttract CORE UI runner")
