@@ -458,3 +458,60 @@ Do not perform negative checks against live printing, Messages or guest files.
 Use synthetic images and placeholder recipients. Never commit photos, phone numbers,
 bookmarks, personal folder data, diagnostic exports or SDK binaries. Ask before real
 printing or sending. Record hardware gaps as unverified, not passing results.
+
+## Native CORE UI Runner
+
+**Status: built and verified on the development Mac (Apple Silicon, macOS 26.7.1); no Intel/TV or
+event-Mac result yet.** The roadmap item "Native UI validation runner" stays open until the device pass.
+
+**Build (development Mac only):** `bash scripts/build-core-ui-runner.sh` writes `dist/CoreUIRunner/`
+(git-ignored): a universal arm64 + x86_64 `CoreUIRunner` linked only against `/System` and `/usr/lib`
+(minos 15.7), `run-core-ui.command` and `INSTRUCTIONS.txt`. The runner compiles the unmodified production
+`GuestView`, `AssistantView`, `PhotoModel`, `PhotoManager`, `PrintManager`, `MessageManager` and
+`AppDelegate` sources into itself. Two test-only edits are applied to the build copy by `sed` (repository
+sources are untouched): `ActionSinks.live` becomes a replaceable variable so printing and Messages are
+stubbed (a probe aborts the run if the swap fails), and `MessageManager.attachmentURL` is made reachable so
+attachments can be inspected without opening a draft. `ErrorLog` is a no-op stub.
+
+**Target use:** copy the folder, put a Release `PhotoBoothAttract.app` in `App/`, run
+`run-core-ui.command`, grant Accessibility to Terminal, and repeat with the TV attached and (for the
+single-display case) with one display. Nothing is compiled or installed. Return `reports/core-ui-*.txt`.
+Exit codes: 0 all automated cases passed, 1 any FAIL, 2 incomplete (any SKIP), 3 could not start.
+`--only N03,A02` selects cases, `--dump-ax` prints the accessibility tree, `--self-test` checks the
+runner's own failure/timeout/skip reporting and locked-fixture cleanup, `--simulate-no-accessibility`
+exercises the missing-permission path.
+
+**Tiers.** NATIVE cases (N01-N11) host the real SwiftUI views in the runner process, read and press the
+real controls through the Accessibility API, sample rendered pixels, and use the real filesystem and
+FSEvents; they are not a full app launch. APP cases (A01-A04) launch a throwaway copy of the supplied app
+(own bundle identifier, ad-hoc re-signed with the system `codesign`, own `HOME` for the log) and observe it
+through Accessibility. The supplied bundle is never modified, no print or Messages action is triggered, and
+only the launched copy is stopped. A04 compares fingerprints of the operator's real preferences plist and log
+before and after. Redirecting `HOME` alone did not redirect preferences (cfprefsd); only the unique bundle
+identifier did, while `HOME` redirected the log.
+
+**Cases.** N01 empty state and saved-folder restoration; N02 switch, refresh, arrival, incomplete write,
+replacement, disappearance; N03 distinct Print only / Digital only / Print & Digital, stable target while
+photos arrive, stale-source refusal, originals hashed; N04 print failure retained/retried/cancelled,
+pending Cancel and Escape protection, late completion of request A not dismissing request B; N05 clear
+cancel, confirm, empty clear and partial failure (immutable files; flags restored); N06 guest grid counts
+0-5 at 800x600 and 1280x720, arrivals, removals, resize, black unused quadrants (pixels); N07 assistant
+badge 1-4 to thumbnail pixels versus guest position; N08 attachment isolation and EXIF 1-8 orientation
+for attachments and thumbnails; N09 40 generated ~5000x3500 JPEGs, main-thread stall bound (0.75 s) and
+peak memory; N10 single-display fallback and N11 dual-display placement using the real `AppDelegate`;
+A01 launch/empty/display placement, A02 restoration/arrivals/incomplete write/replacement/disappearance/
+refresh, A03 folder switch by relaunch, A04 operator files untouched. Unavailable equipment (one display,
+no Accessibility, no app) reports SKIP, never PASS.
+
+**Development-Mac evidence (revision `76d0451` plus this branch):** shell syntax checks and all 170
+`check-folder-lifecycle.sh` checks pass; the actual Debug `xcodebuild` succeeds; the runner self-test
+passes; with the Debug app all 14 applicable cases pass and N10 skips (three displays attached), exit
+code 2. Deliberately wrong builds are rejected: `RUNNER_MUTANT=layout` fails N06, `dismiss` (unconditional
+dismissal on late completion) fails N04, `cancel` (Cancel not disabled while pending) fails N04.
+`--simulate-no-accessibility` yields SKIP with permission instructions. An interrupted run removed its
+fixtures. The artifact ran from a copy with an empty `PATH` (no compiler or package manager). The x86_64
+slice ran only under Rosetta here and is not Intel evidence.
+
+**Pending (record independently, sanitized model and exact OS):** Apple Silicon event-Mac pass; Intel Mac
+with the TV (N10, N11, A01, N09 responsiveness); physical printing; Messages draft (never press Send);
+the Select Folder open panel; display unplug/replug on the TV.
