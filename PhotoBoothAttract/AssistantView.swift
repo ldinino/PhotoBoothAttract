@@ -194,6 +194,7 @@ struct AssistantView: View {
         .animation(.easeInOut(duration: 0.25), value: photoManager.isClearing)
         .sheet(item: $sheetRequest) { request in
             PhoneNumberSheet(
+                requestID: request.id,
                 photo: request.photo,
                 shouldPrint: request.shouldPrint,
                 phoneNumber: $phoneNumber,
@@ -402,6 +403,7 @@ struct AssistantPhotoRow: View {
 }
 
 struct PhoneNumberSheet: View {
+    let requestID: UUID
     let photo: PhotoModel
     let shouldPrint: Bool
     @Binding var phoneNumber: String
@@ -437,6 +439,7 @@ struct PhoneNumberSheet: View {
                     sheetRequest = nil
                 }
                 .keyboardShortcut(.cancelAction)
+                .disabled(isPending)
 
                 Button("Send without number") {
                     submit(recipient: nil)
@@ -452,6 +455,7 @@ struct PhoneNumberSheet: View {
         }
         .padding(30)
         .frame(width: 420)
+        .interactiveDismissDisabled(isPending)
     }
 
     private func send() {
@@ -468,13 +472,17 @@ struct PhoneNumberSheet: View {
             isPending = false
             switch error {
             case nil:
-                sheetRequest = nil
+                dismissIfCurrent()
             case .printFailed:
                 printFailed = true
             case .some(let error):
-                sheetRequest = nil
+                dismissIfCurrent()
                 onFailure(error)
             }
         }
+    }
+
+    private func dismissIfCurrent() {
+        if sheetRequest?.id == requestID { sheetRequest = nil }
     }
 }
