@@ -101,6 +101,45 @@ Messages drafts contain the configured text and photo, with and without a recipi
 remain editable without automatic sending. Use synthetic photos and placeholder recipients;
 do not send messages or record guest data as routine validation.
 
+### Preserve Metadata in Messages Attachments
+
+**Status:** Requested; not implemented. Priority not scheduled.
+
+Preserve standard photo metadata, especially camera-set Artist and Copyright information,
+in the compressed photo handed to Messages. Apply to both addressed and recipient-free
+drafts; keep original photo files untouched.
+
+**Current behavior:** In [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift),
+`compressedCopy(of:name:in:)` bakes orientation into downsampled pixels, and `encodeImage`
+passes only JPEG quality to ImageIO, not source metadata. The original-byte fallback retains
+metadata, including GPS. Recipient-side metadata retention has not been verified.
+
+**Scope:**
+- Preserve standard EXIF/TIFF, IPTC and XMP metadata, including artist/creator and
+	copyright/rights fields. Use ImageIO properties and metadata APIs; vendor MakerNotes are
+	not guaranteed to round-trip.
+- For re-encoded copies, normalize orientation to 1, update EXIF `PixelXDimension` and
+	`PixelYDimension` and other stored dimensions to the actual output size, and remove or
+	regenerate the embedded EXIF preview thumbnail. Do not retain conflicting orientation or
+	dimension values in other metadata namespaces.
+- Preserve the 3000 px longest-edge cap, no upscaling and existing JPEG quality policy.
+	Include metadata bytes in each quality-search and fallback encode. The existing 1 MB
+	sizing goal remains a target, not a guaranteed maximum.
+- Offer assistant-only GPS stripping; confirm its default and persistence before
+	implementation. Apply the chosen policy consistently, including the original-byte
+	fallback. An encode failure must not silently bypass GPS stripping or modify the original.
+
+**Acceptance:** Use synthetic fixtures with known EXIF/TIFF, IPTC and XMP fields, rotated
+orientation, an embedded preview and dummy GPS. Read exported attachments back with
+`CGImageSourceCopyPropertiesAtIndex` and `CGImageSourceCopyMetadataAtIndex`; compare preserved
+fields, orientation 1, actual versus stored dimensions, preview handling and both GPS modes.
+Cover missing metadata, metadata-heavy files near the size target, encode failures and
+fallbacks in both draft paths. Verify original files remain byte-for-byte unchanged.
+
+Export checks do not prove Messages or carriers preserve metadata in the recipient's copy;
+that needs separate, authorized device evidence without automatic sending or guest data.
+Print/save metadata behavior has not been reviewed for this request and is out of scope.
+
 ## References
 
 - [BUGS.md](BUGS.md): glanceable core punchlist.
