@@ -86,7 +86,7 @@ If the guest only wants a digital copy, the assistant uses a different action an
 - **Goal:** Bridge the app to Messages for sending the image.
 - **Directive:** Provide a function that takes a phone number and a local image file URL, then (e.g. via AppleScript or system APIs) opens the native macOS Messages app, creates a new chat with that number, and attaches the image to the draft so the user can hit send.
 
-**Status:** ✅ Implemented. `MessageManager` uses **NSSharingService** (`composeMessage`) with optional recipient and image attachment. Images are optionally compressed (max 3000px, JPEG) before sharing. “Send without number” opens a draft with the configured text (default thank-you message, or none if blank) and image; the assistant can then enter the number manually.
+**Status:** ✅ Implemented. `MessageManager` uses **NSSharingService** (`composeMessage`) with optional recipient and image attachment. Images are compressed (max 3000px, no upscaling, JPEG, 1 MB target) before sharing. The copy keeps standard EXIF/TIFF, IPTC and XMP metadata (including Artist and Copyright) with orientation set to 1 and dimensions matching the output. A Settings toggle, saved with Save and on by default, removes GPS data; when stripping is on and a safe copy cannot be made, no photo is attached and an error is logged. Turning it off allows the original-byte fallback. “Send without number” opens a draft with the configured text (default thank-you message, or none if blank) and image; the assistant can then enter the number manually.
 
 ---
 

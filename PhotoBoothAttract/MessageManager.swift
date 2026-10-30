@@ -21,12 +21,18 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
     /// Fallback quality if target-size search fails (e.g. encode errors).
     private static let fallbackQuality: CGFloat = 0.85
     static let messageTextKey = "messagesDraftText"
+    static let stripGPSKey = "messagesStripGPS"
     static let defaultMessageText = "Thank you for choosing SD Photography. https://www.sd-photo.com/"
 
     /// Saved text, the default when unset or not a string; nil (photo only) when blank.
     static func draftText(defaults: UserDefaults = .standard) -> String? {
         let text = defaults.object(forKey: messageTextKey) as? String ?? defaultMessageText
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+    }
+
+    /// Removing GPS is the default; only an explicit saved false keeps it.
+    static func stripsGPS(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: stripGPSKey) as? Bool ?? true
     }
 
     static func draftItems(text: String?, attachment: URL) -> [Any] {
@@ -47,7 +53,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
     }
 
     private func openDraft(imageData: Data, name: String, recipient: String?) {
-        guard let sendURL = attachmentURL(for: imageData, name: name) else { return }
+        guard let sendURL = attachmentURL(for: imageData, name: name, stripGPS: Self.stripsGPS()) else { return }
 
         guard let service = NSSharingService(named: .composeMessage) else {
             ErrorLog.shared.log("MessageManager: composeMessage service unavailable")
@@ -62,7 +68,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
 
     /// A file in its own per-request directory. Handed-off files are never deleted: when
     /// Messages finishes reading them is unverified, so the system temp cleanup reclaims them.
-    private func attachmentURL(for data: Data, name: String) -> URL? {
+    private func attachmentURL(for data: Data, name: String, stripGPS: Bool) -> URL? {
         let fileName = (name as NSString).lastPathComponent
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("PhotoBoothAttract-messages", isDirectory: true)
@@ -73,7 +79,12 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
             ErrorLog.shared.log("MessageManager: Could not create attachment folder: \(error)")
             return nil
         }
-        if let url = compressedCopy(of: data, name: fileName, in: directory) { return url }
+        if let url = compressedCopy(of: data, name: fileName, in: directory, stripGPS: stripGPS) { return url }
+        guard !stripGPS else {
+            ErrorLog.shared.log("MessageManager: Could not remove GPS from the attachment; not attaching the photo")
+            try? FileManager.default.removeItem(at: directory)
+            return nil
+        }
         let url = directory.appendingPathComponent(fileName)
         do {
             try data.write(to: url)
@@ -92,13 +103,46 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
 
     // MARK: - Image Compression
 
-    /// Encodes image to JPEG at the given quality; returns file size in bytes, or nil on failure.
-    private func encodeImage(_ image: CGImage, to url: URL, quality: CGFloat) -> Int64? {
+    /// Source metadata adjusted for a re-encoded copy of the given pixel size. Orientation is already
+    /// baked into the pixels, so any stored tag becomes 1; stored dimensions follow the output.
+    static func outputMetadata(from source: CGImageMetadata?, width: Int, height: Int, stripGPS: Bool) -> CGImageMetadata {
+        let metadata = source.flatMap { CGImageMetadataCreateMutableCopy($0) } ?? CGImageMetadataCreateMutable()
+        if stripGPS {
+            for path in gpsPaths(in: metadata) { CGImageMetadataRemoveTagWithPath(metadata, nil, path as CFString) }
+        }
+        let values: [(String, Int)] = [("tiff:Orientation", 1), ("exif:PixelXDimension", width), ("exif:PixelYDimension", height),
+                                       ("tiff:ImageWidth", width), ("tiff:ImageLength", height)]
+        for (path, value) in values where CGImageMetadataCopyTagWithPath(metadata, nil, path as CFString) != nil {
+            CGImageMetadataSetValueWithPath(metadata, nil, path as CFString, value as CFNumber)
+        }
+        return metadata
+    }
+
+    private static func gpsPaths(in metadata: CGImageMetadata) -> [String] {
+        var paths: [String] = []
+        let options = [kCGImageMetadataEnumerateRecursively: true] as CFDictionary
+        CGImageMetadataEnumerateTagsUsingBlock(metadata, nil, options) { path, _ in
+            if (path as String).contains("GPS") { paths.append(path as String) }
+            return true
+        }
+        return paths
+    }
+
+    /// True when the file has a GPS property dictionary or any GPS metadata tag.
+    static func containsGPS(at url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return true }
+        let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        if props?[kCGImagePropertyGPSDictionary] != nil { return true }
+        return CGImageSourceCopyMetadataAtIndex(source, 0, nil).map { !gpsPaths(in: $0).isEmpty } ?? false
+    }
+
+    /// Encodes image and metadata to JPEG at the given quality; returns file size in bytes, or nil on failure.
+    private func encodeImage(_ image: CGImage, metadata: CGImageMetadata, to url: URL, quality: CGFloat) -> Int64? {
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.jpeg" as CFString, 1, nil) else {
             return nil
         }
         let props: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: quality]
-        CGImageDestinationAddImage(destination, image, props as CFDictionary)
+        CGImageDestinationAddImageAndMetadata(destination, image, metadata, props as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
             return nil
         }
@@ -115,7 +159,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
     }
 
     /// Produces a JPEG copy sized for MMS (≤ targetFileSizeBytes) at the highest quality that fits.
-    private func compressedCopy(of data: Data, name: String, in directory: URL) -> URL? {
+    private func compressedCopy(of data: Data, name: String, in directory: URL, stripGPS: Bool) -> URL? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let pixelWidth = props[kCGImagePropertyPixelWidth] as? Int,
@@ -139,8 +183,20 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
             return nil
         }
 
+        let metadata = Self.outputMetadata(from: CGImageSourceCopyMetadataAtIndex(source, 0, nil),
+                                           width: finalImage.width, height: finalImage.height, stripGPS: stripGPS)
+        guard let url = encodeBest(finalImage, metadata: metadata, to: destURL) else { return nil }
+        if stripGPS && Self.containsGPS(at: url) {
+            ErrorLog.shared.log("MessageManager: GPS metadata remained after re-encoding")
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+        return url
+    }
+
+    private func encodeBest(_ finalImage: CGImage, metadata: CGImageMetadata, to destURL: URL) -> URL? {
         // Try initial quality; if already under target, we're done.
-        if let size = encodeImage(finalImage, to: destURL, quality: Self.initialQuality),
+        if let size = encodeImage(finalImage, metadata: metadata, to: destURL, quality: Self.initialQuality),
            size <= Self.targetFileSizeBytes {
             return destURL
         }
@@ -154,7 +210,7 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
 
         while iterations < Self.maxQualityIterations && (high - low) > qualityTolerance {
             let mid = (low + high) / 2
-            guard let size = encodeImage(finalImage, to: destURL, quality: mid) else {
+            guard let size = encodeImage(finalImage, metadata: metadata, to: destURL, quality: mid) else {
                 ErrorLog.shared.log("MessageManager: Encode failed during quality search at \(mid)")
                 break
             }
@@ -168,12 +224,12 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
         }
 
         // Final encode at best quality (ensures valid file; handles case where we never got under target).
-        if encodeImage(finalImage, to: destURL, quality: bestQuality) != nil {
+        if encodeImage(finalImage, metadata: metadata, to: destURL, quality: bestQuality) != nil {
             return destURL
         }
 
         // Fallback: single encode at legacy quality so sharing still works.
-        if encodeImage(finalImage, to: destURL, quality: Self.fallbackQuality) != nil {
+        if encodeImage(finalImage, metadata: metadata, to: destURL, quality: Self.fallbackQuality) != nil {
             ErrorLog.shared.log("MessageManager: Using fallback quality after target-size search failed")
             return destURL
         }

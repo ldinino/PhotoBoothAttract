@@ -89,16 +89,30 @@ do not send messages or record guest data as routine validation.
 
 ### Preserve Metadata in Messages Attachments
 
-**Status:** Requested; not implemented. High priority; required before SDK implementation.
+**Status:** Implemented on branch `feat/preserve-message-metadata`; pending audit and merge.
+Software checks pass (see Acceptance). Real Messages drafts on Intel and Apple Silicon, and
+recipient-copy retention, are deferred to the final hardware gate. High priority; required
+before SDK implementation. CORE acceptance remains open.
 
 Preserve standard photo metadata, especially camera-set Artist and Copyright information,
 in the compressed photo handed to Messages. Apply to both addressed and recipient-free
 drafts; keep original photo files untouched.
 
-**Current behavior:** In [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift),
-`compressedCopy(of:name:in:)` bakes orientation into downsampled pixels, and `encodeImage`
-passes only JPEG quality to ImageIO, not source metadata. The original-byte fallback retains
-metadata, including GPS. Recipient-side metadata retention has not been verified.
+**Behavior:** In [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift),
+`compressedCopy` bakes orientation into downsampled pixels and writes the source's ImageIO
+metadata (`CGImageMetadata`) with each encode, so the whole file, metadata included, is measured
+against the 1 MB target. `outputMetadata` sets stored orientation to 1 and stored dimensions to the
+output size; the embedded preview is not carried over. Vendor MakerNotes are not guaranteed to
+round-trip. Standard XMP larger than one APP1 segment (about 64 KB) was not exercised.
+Recipient-side metadata retention has not been verified.
+
+**GPS policy (working decision, open for maintainer override):** a Messages setting in
+[SettingsView.swift](../PhotoBoothAttract/SettingsView.swift), persisted by Save under
+`messagesStripGPS`, removes GPS. Missing or non-boolean values remove it; only an explicit saved
+off keeps it. Each attachment request reads the setting once. Removal covers the GPS property
+dictionary and every GPS tag in the metadata, and the result is read back before use. When
+stripping is on and the re-encode fails or GPS remains, no attachment is produced and an error is
+logged; the original-byte fallback is used only when stripping is off.
 
 **Scope:**
 - Preserve standard EXIF/TIFF, IPTC and XMP metadata, including artist/creator and
@@ -121,6 +135,21 @@ orientation, an embedded preview and dummy GPS. Read exported attachments back w
 fields, orientation 1, actual versus stored dimensions, preview handling and both GPS modes.
 Cover missing metadata, metadata-heavy files near the size target, encode failures and
 fallbacks in both draft paths. Verify original files remain byte-for-byte unchanged.
+
+**Software evidence:** `bash scripts/check-folder-lifecycle.sh` reads production-generated
+attachments back with `CGImageSourceCopyPropertiesAtIndex` and `CGImageSourceCopyMetadataAtIndex`:
+attribution in TIFF, IPTC and XMP; orientations 1-8 and none at 2000 and 4000 px; resize; preview
+removal; missing metadata; a metadata-heavy file; both policies; the preference defaults; forced
+encode failure and undecodable-source fallbacks; and unchanged source bytes. Mutants that bypass
+stripping, let stripping requests fall back to raw bytes, or leave stored orientation/dimension tags
+stale are rejected. Both draft paths share `attachmentURL`, and the policy is read once in
+`openDraft`. Settings save, unsaved dismissal and relaunch persistence were exercised in the real
+Debug app. Messages itself was not opened.
+
+**Pending hardware gate:** [core-ui-runner](../scripts/core-ui-runner/main.swift) lists the manual
+checks. On Intel and Apple Silicon, inspect addressed and recipient-free drafts with synthetic
+photos under both GPS settings, and compare sanitized fields with the source. Recipient copies
+need separately authorized delivery evidence.
 
 Export checks do not prove Messages or carriers preserve metadata in the recipient's copy;
 that needs separate, authorized device evidence without automatic sending or guest data.

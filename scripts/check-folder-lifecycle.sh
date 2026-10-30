@@ -13,6 +13,8 @@
 # LIFECYCLE_MUTANT=attachment: CORE-003 attachments share the temp directory (deterministic paths).
 # LIFECYCLE_MUTANT=orientation: CORE-008 shares skip orientation normalization.
 # LIFECYCLE_MUTANT=blankdefault: blank Messages text restores the default.
+# LIFECYCLE_MUTANT=gps|rawfallback|nodims: GPS stripping bypassed | stripping requests still get raw bytes on
+# failure | stored orientation and dimension tags left as the source had them.
 # LIFECYCLE_MUTANT=clearsuccess|clearhide: CORE-005 clear always reports success | failed deletions lose their rows.
 set -euo pipefail
 
@@ -48,7 +50,14 @@ case "${LIFECYCLE_MUTANT:-}" in
     attachment) sed -i '' '/PhotoBoothAttract-messages/d; /UUID().uuidString, isDirectory: true)/d' "$WORK/MessageManager.swift" ;;
     blankdefault) sed -i '' 's/.isEmpty ? nil : text/.isEmpty ? defaultMessageText : text/' "$WORK/MessageManager.swift" ;;
     orientation) sed -i '' 's/kCGImageSourceCreateThumbnailWithTransform: true/kCGImageSourceCreateThumbnailWithTransform: false/' "$WORK/MessageManager.swift" ;;
+    gps) sed -i '' 's/        if stripGPS {$/        if false {/' "$WORK/MessageManager.swift" ;;
+    rawfallback) sed -i '' 's/guard !stripGPS else {/guard true else {/' "$WORK/MessageManager.swift" ;;
+    nodims) sed -i '' 's/for (path, value) in values where CGImageMetadataCopyTagWithPath/for (path, value) in values where false \&\& CGImageMetadataCopyTagWithPath/' "$WORK/MessageManager.swift" ;;
 esac
+# Test seam: forces every encode to fail, in this copy only.
+sed -i '' -E 's/(func encodeImage.*\{)$/\1\
+        if forceEncodeFailure { return nil }/' "$WORK/MessageManager.swift"
+echo 'var forceEncodeFailure = false' >> "$WORK/MessageManager.swift"
 case "${LIFECYCLE_MUTANT:-}" in
     url) sed -i '' 's/SHA256.hash(data: data) == digest ? /true ? /' "$WORK/PhotoModel.swift" ;;
     mainread) sed -i '' 's/DispatchQueue.global(qos: .userInitiated).async {/DispatchQueue.main.async {/' "$WORK/PhotoModel.swift" ;;
@@ -681,21 +690,21 @@ let atmm = MessageManager.shared
 let atfm = FileManager.default
 let imgA = bigJPEG(.red), imgB = bigJPEG(.blue)
 let junkA = Data("not an image A".utf8), junkB = Data("not an image B".utf8)
-let ata1 = atmm.attachmentURL(for: imgA, name: "IMG_1.png")!
+let ata1 = atmm.attachmentURL(for: imgA, name: "IMG_1.png", stripGPS: false)!
 let aBytes = try! Data(contentsOf: ata1)
-let atb1 = atmm.attachmentURL(for: imgB, name: "IMG_1.png")!
-let ata2 = atmm.attachmentURL(for: imgA, name: "IMG_1.png")!
+let atb1 = atmm.attachmentURL(for: imgB, name: "IMG_1.png", stripGPS: false)!
+let ata2 = atmm.attachmentURL(for: imgA, name: "IMG_1.png", stripGPS: false)!
 check("attachments: same basename, different images get distinct URLs", ata1 != atb1 && ata1.deletingLastPathComponent() != atb1.deletingLastPathComponent())
 check("attachments: preparing B leaves A's bytes unchanged", (try? Data(contentsOf: ata1)) == aBytes && (try? Data(contentsOf: atb1)) != aBytes)
 check("attachments: repeated requests for A get distinct URLs", ata1 != ata2)
-let atf1 = atmm.attachmentURL(for: junkA, name: "IMG_1.png")!
-let atf2 = atmm.attachmentURL(for: junkB, name: "IMG_1.png")!
-let atc3 = atmm.attachmentURL(for: imgB, name: "IMG_1.png")!
+let atf1 = atmm.attachmentURL(for: junkA, name: "IMG_1.png", stripGPS: false)!
+let atf2 = atmm.attachmentURL(for: junkB, name: "IMG_1.png", stripGPS: false)!
+let atc3 = atmm.attachmentURL(for: imgB, name: "IMG_1.png", stripGPS: false)!
 check("attachments: fallback keeps exact bytes and stays isolated", (try? Data(contentsOf: atf1)) == junkA && (try? Data(contentsOf: atf2)) == junkB && atf1 != atf2 && atf1 != atc3)
 check("attachments: compressed and fallback requests do not collide", Set([ata1, atb1, ata2, atf1, atf2, atc3].map { $0.path }).count == 6 && (try? Data(contentsOf: ata1)) == aBytes)
 let srcDir = folder("attsrc"); let srcFile = srcDir.appendingPathComponent("IMG_1.png"); png(srcFile)
 let srcBytes = try! Data(contentsOf: srcFile)
-let fromSrc = atmm.attachmentURL(for: srcBytes, name: srcFile.lastPathComponent)!
+let fromSrc = atmm.attachmentURL(for: srcBytes, name: srcFile.lastPathComponent, stripGPS: false)!
 check("attachments: original is untouched and the copy is outside its folder", (try? Data(contentsOf: srcFile)) == srcBytes && fromSrc.deletingLastPathComponent().deletingLastPathComponent() != srcDir)
 let atkeep = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ATTACH_ROOT"]!).appendingPathComponent("keep-sentinel")
 try! Data("x".utf8).write(to: atkeep)
@@ -753,7 +762,7 @@ for longest in [2400, 3000, 4000] {
         let src = oriJPEG(w, h, orientation: orientation)
         let srcFile = oriDir.appendingPathComponent("o\(orientation ?? 0)_\(longest).jpg")
         try! src.write(to: srcFile)
-        let url = atmm.attachmentURL(for: src, name: srcFile.lastPathComponent)!
+        let url = atmm.attachmentURL(for: src, name: srcFile.lastPathComponent, stripGPS: true)!
         let r = oriSample(url)
         let swap = o >= 5
         let ew = swap ? expLong / 2 : expLong, eh = swap ? expLong : expLong / 2
@@ -765,6 +774,173 @@ for longest in [2400, 3000, 4000] {
     }
 }
 try? atfm.removeItem(at: oriDir)
+
+// Messages metadata: production-generated attachments read back with ImageIO
+let mdTags: [CFString: Any] = [kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFArtist: "Test Photographer", kCGImagePropertyTIFFCopyright: "(c) Test Studio"],
+                               kCGImagePropertyIPTCDictionary: [kCGImagePropertyIPTCByline: ["Test Photographer"], kCGImagePropertyIPTCCopyrightNotice: "(c) Test Studio"]]
+let mdGPS: [CFString: Any] = [kCGImagePropertyGPSLatitude: 12.5, kCGImagePropertyGPSLatitudeRef: "N", kCGImagePropertyGPSLongitude: 34.5, kCGImagePropertyGPSLongitudeRef: "E"]
+func mdXMP(_ gps: Bool, heavy: Int) -> CGMutableImageMetadata {
+    let m = CGImageMetadataCreateMutable()
+    CGImageMetadataSetValueWithPath(m, nil, "dc:creator" as CFString, ["Test Photographer"] as CFArray)
+    CGImageMetadataSetValueWithPath(m, nil, "dc:rights" as CFString, "(c) Test Studio" as CFString)
+    if gps {
+        CGImageMetadataSetValueWithPath(m, nil, "exif:GPSLatitude" as CFString, "12,30.000N" as CFString)
+        CGImageMetadataSetValueWithPath(m, nil, "exif:GPSLongitude" as CFString, "34,30.000E" as CFString)
+    }
+    if heavy > 0 { CGImageMetadataSetValueWithPath(m, nil, "dc:description" as CFString, String(repeating: "caption ", count: heavy / 8) as CFString) }
+    return m
+}
+func mdSource(_ w: Int, _ h: Int, orientation: Int?, tags: Bool = true, gps: Bool = true, preview: Bool = false, heavy: Int = 0, noise: Bool = false) -> Data {
+    let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    if noise {
+        let px = ctx.data!.assumingMemoryBound(to: UInt8.self)
+        var rng = SystemRandomNumberGenerator()
+        for i in 0..<(ctx.bytesPerRow * h) { px[i] = UInt8.random(in: 0...255, using: &rng) }
+    } else {
+        ctx.setFillColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+    }
+    var props: [CFString: Any] = tags ? mdTags : [:]
+    if gps { props[kCGImagePropertyGPSDictionary] = mdGPS }
+    if let orientation { props[kCGImagePropertyOrientation] = orientation }
+    props[kCGImagePropertyExifDictionary] = [kCGImagePropertyExifPixelXDimension: w, kCGImagePropertyExifPixelYDimension: h]
+    props[kCGImageDestinationLossyCompressionQuality] = 0.95
+    if preview { props[kCGImageDestinationEmbedThumbnail] = true }
+    let base = NSMutableData()
+    let d1 = CGImageDestinationCreateWithData(base, "public.jpeg" as CFString, 1, nil)!
+    CGImageDestinationAddImage(d1, ctx.makeImage()!, props as CFDictionary)
+    precondition(CGImageDestinationFinalize(d1))
+    guard tags || heavy > 0 || gps else { return base as Data }
+    let out = NSMutableData()
+    let d2 = CGImageDestinationCreateWithData(out, "public.jpeg" as CFString, 1, nil)!
+    let opts: [CFString: Any] = [kCGImageDestinationMetadata: mdXMP(gps, heavy: heavy), kCGImageDestinationMergeMetadata: true]
+    var err: Unmanaged<CFError>?
+    precondition(CGImageDestinationCopyImageSource(d2, CGImageSourceCreateWithData(base, nil)!, opts as CFDictionary, &err), "fixture XMP copy failed")
+    return out as Data
+}
+struct MdRead { var props: [CFString: Any]; var md: CGImageMetadata?; var hasThumb: Bool }
+// An embedded EXIF preview is a second JPEG stream (SOI marker) inside the file.
+func mdHasPreview(_ d: Data) -> Bool { d.indices.dropFirst(2).filter { d[$0 - 2] == 0xFF && d[$0 - 1] == 0xD8 && d[$0] == 0xFF }.count > 1 }
+func mdRead(_ data: Data) -> MdRead {
+    let s = CGImageSourceCreateWithData(data as CFData, nil)!
+    return MdRead(props: CGImageSourceCopyPropertiesAtIndex(s, 0, nil) as! [CFString: Any], md: CGImageSourceCopyMetadataAtIndex(s, 0, nil), hasThumb: mdHasPreview(data))
+}
+func mdString(_ r: MdRead, _ path: String) -> String {
+    guard let m = r.md, let tag = CGImageMetadataCopyTagWithPath(m, nil, path as CFString), let v = CGImageMetadataTagCopyValue(tag) else { return "" }
+    return "\(v)"
+}
+func mdHasGPS(_ r: MdRead) -> Bool {
+    if r.props[kCGImagePropertyGPSDictionary] != nil { return true }
+    var found = false
+    if let m = r.md {
+        CGImageMetadataEnumerateTagsUsingBlock(m, nil, [kCGImageMetadataEnumerateRecursively: true] as CFDictionary) { path, _ in
+            if (path as String).contains("GPS") { found = true }
+            return true
+        }
+    }
+    return found
+}
+func mdSub(_ r: MdRead, _ key: CFString) -> [CFString: Any] { r.props[key] as? [CFString: Any] ?? [:] }
+func mdKept(_ r: MdRead) -> Bool {
+    let tiff = mdSub(r, kCGImagePropertyTIFFDictionary), iptc = mdSub(r, kCGImagePropertyIPTCDictionary)
+    return tiff[kCGImagePropertyTIFFArtist] as? String == "Test Photographer" && tiff[kCGImagePropertyTIFFCopyright] as? String == "(c) Test Studio"
+        && (iptc[kCGImagePropertyIPTCByline] as? [String]) == ["Test Photographer"] && iptc[kCGImagePropertyIPTCCopyrightNotice] as? String == "(c) Test Studio"
+        && mdString(r, "dc:creator").contains("Test Photographer") && mdString(r, "dc:rights").contains("(c) Test Studio")
+}
+// Attribution as stored; a source without an orientation tag has no TIFF Artist, so compare with the source.
+func mdAttribution(_ r: MdRead) -> String {
+    let tiff = mdSub(r, kCGImagePropertyTIFFDictionary), iptc = mdSub(r, kCGImagePropertyIPTCDictionary)
+    return "\(tiff[kCGImagePropertyTIFFArtist] ?? "-")|\(tiff[kCGImagePropertyTIFFCopyright] ?? "-")|\(iptc[kCGImagePropertyIPTCByline] ?? "-")|\(iptc[kCGImagePropertyIPTCCopyrightNotice] ?? "-")|\(mdString(r, "dc:creator").contains("Test Photographer"))|\(mdString(r, "dc:rights").contains("(c) Test Studio"))"
+}
+func mdAttach(_ data: Data, strip: Bool) -> (url: URL?, r: MdRead?) {
+    guard let url = atmm.attachmentURL(for: data, name: "MD_1.jpg", stripGPS: strip) else { return (nil, nil) }
+    return (url, mdRead(try! Data(contentsOf: url)))
+}
+
+let mdFix = mdSource(4000, 2000, orientation: 6, preview: true)
+let mdFixR = mdRead(mdFix)
+check("metadata fixture: has attribution, GPS, orientation 6 and an embedded preview", mdKept(mdFixR) && mdHasGPS(mdFixR) && mdFixR.props[kCGImagePropertyOrientation] as? Int == 6 && mdFixR.hasThumb)
+for strip in [true, false] {
+    let p = strip ? "strip" : "retain"
+    for orientation in [nil] + Array(1...8).map { Optional($0) } {
+        for longest in [2000, 4000] {
+            let w = longest, h = longest / 2
+            let src = mdSource(w, h, orientation: orientation, preview: orientation == 6)
+            let o = orientation ?? 1
+            let (url, r) = mdAttach(src, strip: strip)
+            let label = "metadata \(p) orientation \(orientation.map(String.init) ?? "none") longest \(longest)"
+            guard let url, let r else { check("\(label): attachment produced", false); continue }
+            let expLong = min(longest, 3000)
+            let ew = o >= 5 ? expLong / 2 : expLong, eh = o >= 5 ? expLong : expLong / 2
+            let pw = r.props[kCGImagePropertyPixelWidth] as? Int ?? 0, ph = r.props[kCGImagePropertyPixelHeight] as? Int ?? 0
+            let exif = mdSub(r, kCGImagePropertyExifDictionary), tiff = mdSub(r, kCGImagePropertyTIFFDictionary)
+            check("\(label): size, orientation 1 and stored dimensions match the output",
+                  abs(pw - ew) <= 1 && abs(ph - eh) <= 1 && r.props[kCGImagePropertyOrientation] as? Int ?? 1 == 1 && tiff[kCGImagePropertyTIFFOrientation] as? Int ?? 1 == 1
+                  && exif[kCGImagePropertyExifPixelXDimension] as? Int == pw && exif[kCGImagePropertyExifPixelYDimension] as? Int == ph
+                  && ["exif:PixelXDimension", "tiff:ImageWidth"].allSatisfy { let v = mdString(r, $0); return v.isEmpty || Int(v) == pw }
+                  && ["exif:PixelYDimension", "tiff:ImageLength"].allSatisfy { let v = mdString(r, $0); return v.isEmpty || Int(v) == ph }
+                  && ["tiff:Orientation"].allSatisfy { let v = mdString(r, $0); return v.isEmpty || v == "1" })
+            check("\(label): attribution and rights kept in TIFF, IPTC and XMP; no stale preview", (orientation == nil || mdKept(r)) && mdAttribution(r) == mdAttribution(mdRead(src)) && mdString(r, "dc:rights").contains("(c) Test Studio") && !r.hasThumb)
+            check("\(label): GPS policy applied", strip ? (!mdHasGPS(r) && !MessageManager.containsGPS(at: url)) : (mdSub(r, kCGImagePropertyGPSDictionary)[kCGImagePropertyGPSLatitude] as? Double == 12.5 && mdHasGPS(r)))
+            try? atfm.removeItem(at: url.deletingLastPathComponent())
+        }
+    }
+}
+
+let mdPlain = mdSource(1200, 800, orientation: nil, tags: false, gps: false)
+for strip in [true, false] {
+    let (url, r) = mdAttach(mdPlain, strip: strip)
+    check("metadata missing (strip \(strip)): attachment produced without invented attribution or GPS",
+          r != nil && !mdHasGPS(r!) && mdString(r!, "dc:rights").isEmpty && mdSub(r!, kCGImagePropertyTIFFDictionary)[kCGImagePropertyTIFFCopyright] == nil)
+    if let url { try? atfm.removeItem(at: url.deletingLastPathComponent()) }
+}
+
+// Metadata-heavy and near the 1 MB target: total file size, not pixels alone, drives the quality search
+let mdNoisy = mdSource(1200, 850, orientation: nil, tags: false, gps: false, noise: true)
+let mdNoisyHeavy = mdSource(1200, 850, orientation: 1, tags: true, gps: true, heavy: 60_000, noise: true)
+let mdLight = mdAttach(mdNoisy, strip: true), mdHeavy = mdAttach(mdNoisyHeavy, strip: true)
+let mdLightSize = (try? atfm.attributesOfItem(atPath: mdLight.url!.path)[.size] as? Int) ?? 0
+let mdHeavySize = (try? atfm.attributesOfItem(atPath: mdHeavy.url!.path)[.size] as? Int) ?? 0
+check("metadata heavy: noisy photo is searched toward the 1 MB target (\(mdLightSize) bytes)", mdLightSize > 0 && mdLightSize <= 1_048_576 && mdLightSize > 700_000)
+check("metadata heavy: metadata bytes count toward the target (\(mdHeavySize) bytes), attribution kept, no GPS", mdHeavySize > 0 && mdHeavySize <= 1_048_576 && mdKept(mdHeavy.r!) && !mdHasGPS(mdHeavy.r!))
+for a in [mdLight.url, mdHeavy.url] { if let a { try? atfm.removeItem(at: a.deletingLastPathComponent()) } }
+
+// Fallbacks follow the GPS policy
+let mdJunk = Data("not an image".utf8)
+let mdRetainJunk = atmm.attachmentURL(for: mdJunk, name: "MD_1.jpg", stripGPS: false)
+check("metadata fallback: undecodable source with GPS retained keeps exact bytes", mdRetainJunk != nil && (try? Data(contentsOf: mdRetainJunk!)) == mdJunk)
+check("metadata fallback: undecodable source with GPS stripping gives no attachment", atmm.attachmentURL(for: mdJunk, name: "MD_1.jpg", stripGPS: true) == nil)
+forceEncodeFailure = true
+let mdDirsBefore = ((try? atfm.contentsOfDirectory(atPath: ProcessInfo.processInfo.environment["ATTACH_ROOT"]! + "/PhotoBoothAttract-messages").count) ?? -1) + 1
+let mdFailRetain = atmm.attachmentURL(for: mdFix, name: "MD_1.jpg", stripGPS: false)
+check("metadata fallback: forced encode failure with GPS retained keeps exact original bytes", mdFailRetain != nil && (try? Data(contentsOf: mdFailRetain!)) == mdFix)
+let mdFailStrip = atmm.attachmentURL(for: mdFix, name: "MD_1.jpg", stripGPS: true)
+check("metadata fallback: forced encode failure with GPS stripping gives no attachment", mdFailStrip == nil)
+let mdRoot = ProcessInfo.processInfo.environment["ATTACH_ROOT"]! + "/PhotoBoothAttract-messages"
+let mdDirsAfter = (try? atfm.contentsOfDirectory(atPath: mdRoot).count) ?? -1
+check("metadata fallback: failed stripping requests leave no request directory", mdDirsAfter == mdDirsBefore)
+forceEncodeFailure = false
+let mdSrcDir = folder("mdsrc"); let mdSrcFile = mdSrcDir.appendingPathComponent("MD_2.jpg")
+try! mdFix.write(to: mdSrcFile)
+for strip in [true, false] { if let u = atmm.attachmentURL(for: try! Data(contentsOf: mdSrcFile), name: mdSrcFile.lastPathComponent, stripGPS: strip) { try? atfm.removeItem(at: u.deletingLastPathComponent()) } }
+check("metadata: original file bytes unchanged by both policies", (try? Data(contentsOf: mdSrcFile)) == mdFix)
+try? atfm.removeItem(at: mdSrcDir)
+if let u = mdRetainJunk { try? atfm.removeItem(at: u.deletingLastPathComponent()) }
+if let u = mdFailRetain { try? atfm.removeItem(at: u.deletingLastPathComponent()) }
+
+// GPS policy preference: isolated defaults, missing/invalid means strip
+let gpSuite = "folder-lifecycle-checks.gps"
+let gpDefaults = UserDefaults(suiteName: gpSuite)!
+gpDefaults.removePersistentDomain(forName: gpSuite)
+check("gps policy: missing preference strips", MessageManager.stripsGPS(defaults: gpDefaults))
+for bad in ["no", ["a"], Data([1]), 3.5] as [Any] {
+    gpDefaults.set(bad, forKey: MessageManager.stripGPSKey)
+    check("gps policy: invalid \(type(of: bad)) strips", MessageManager.stripsGPS(defaults: gpDefaults))
+}
+gpDefaults.set(false, forKey: MessageManager.stripGPSKey)
+check("gps policy: explicit false retains and persists to a fresh handle", !MessageManager.stripsGPS(defaults: UserDefaults(suiteName: gpSuite)!))
+gpDefaults.set(true, forKey: MessageManager.stripGPSKey)
+check("gps policy: explicit true strips", MessageManager.stripsGPS(defaults: UserDefaults(suiteName: gpSuite)!))
+gpDefaults.removePersistentDomain(forName: gpSuite)
 
 // Messages draft text: isolated preferences, production helpers, no sharing service
 let mtSuite = "folder-lifecycle-checks.messages"
