@@ -86,7 +86,7 @@ If the guest only wants a digital copy, the assistant uses a different action an
 - **Goal:** Bridge the app to Messages for sending the image.
 - **Directive:** Provide a function that takes a phone number and a local image file URL, then (e.g. via AppleScript or system APIs) opens the native macOS Messages app, creates a new chat with that number, and attaches the image to the draft so the user can hit send.
 
-**Status:** ✅ Implemented. `MessageManager` uses **NSSharingService** (`composeMessage`) with optional recipient and image attachment. Images are optionally compressed (max 3000px, JPEG) before sharing. “Send without number” opens a draft with the image only; the assistant can then enter the number manually.
+**Status:** ✅ Implemented. `MessageManager` uses **NSSharingService** (`composeMessage`) with optional recipient and image attachment. Images are optionally compressed (max 3000px, JPEG) before sharing. “Send without number” opens a draft with the configured text (default thank-you message, or none if blank) and image; the assistant can then enter the number manually.
 
 ---
 
@@ -98,7 +98,7 @@ If the guest only wants a digital copy, the assistant uses a different action an
 | **Watched folder** | User chooses the Sony Image Desktop (or any) output folder via **Select Folder** in the Assistant view; path is persisted with a security-scoped bookmark. |
 | **Error Log** | Help → **Error Log** (or ⌘⌥L) opens a window with timestamps and messages; clear and “Save to File” are available. |
 | **Sort order** | Photos are always newest-first. A sort-order toggle is not yet implemented. |
-| **Messages** | Uses `NSSharingService` rather than AppleScript; behavior matches “open draft with image (and optional number).” |
+| **Messages** | Uses `NSSharingService` rather than AppleScript; opens a draft with the configured text (default thank-you message, or none if blank) and image, optionally addressed to a phone number. |
 
 ---
 

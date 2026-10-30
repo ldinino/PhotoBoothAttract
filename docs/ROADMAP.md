@@ -59,7 +59,13 @@ The CORE acceptance gate above remains unchanged; these features do not close pe
 
 ### Customizable Messages Draft Text
 
-**Status:** Implemented on `feat/customizable-messages-text` (PR pending audit). Focused automated checks and a Debug build pass; real Messages drafts on Intel and Apple Silicon, and Settings window inspection, are not yet tested. High priority; required before SDK implementation.
+**Status:** Code merged in PR #16 (`b19ce59`). Independent review passed 182 regression
+assertions, rejected the blank-default mutant with three expected failures, and reran the
+correct suite successfully, including on merged main. The arm64 Debug build and eight
+isolated real-app Settings checks pass; Settings-only screenshots were inspected. Save,
+unsaved dismissal, multiline text, blank text and relaunch persistence were verified.
+Real Messages drafts on Intel and Apple Silicon remain untested. High priority; required
+before SDK implementation. CORE acceptance remains open.
 
 Allow the assistant to customize the message prefilled alongside a photo without changing
 code. Both addressed and recipient-free drafts must use the same configured text. Messages
