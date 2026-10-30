@@ -202,9 +202,9 @@ final class SonyCameraManager: NSObject, ObservableObject {
     private var activeUSBDeviceUUID: String?
     private var started = false
 
-    init(mode: CameraMode = .launched, makeBackend: @escaping (SonyCameraManager) -> Backend = SonyCameraManager.liveBackend) {
+    init(mode: CameraMode = .launched, makeBackend: ((SonyCameraManager) -> Backend)? = nil) {
         self.mode = mode
-        self.makeBackend = makeBackend
+        self.makeBackend = makeBackend ?? { SonyCameraManager.liveBackend(for: $0) }
         super.init()
     }
 
