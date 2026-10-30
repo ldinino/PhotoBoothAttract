@@ -165,6 +165,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 }
 
+enum CameraMode: String, CaseIterable, Identifiable {
+    case cooperative
+    case native
+
+    static let key = "cameraMode"
+    /// Mode chosen at process start; changes saved later apply on the next launch.
+    static let launched = resolve()
+
+    var id: String { rawValue }
+    var title: String { self == .cooperative ? "Cooperative" : "Native" }
+
+    static func resolve(_ defaults: UserDefaults = .standard) -> CameraMode {
+        defaults.string(forKey: key).flatMap(CameraMode.init(rawValue:)) ?? .cooperative
+    }
+}
+
 enum CameraConnectionStatus: Equatable {
     case notConnected
     case connected(model: String)
@@ -174,37 +190,56 @@ enum CameraConnectionStatus: Equatable {
 final class SonyCameraManager: NSObject, ObservableObject {
     @Published private(set) var connectionStatus: CameraConnectionStatus = .notConnected
 
-    private let sdkLoader = SonySDKLoader()
-    private let deviceBrowser = ICDeviceBrowser()
+    struct Backend {
+        let load: () -> String?
+        let startDiscovery: () -> Void
+        let stopDiscovery: () -> Void
+    }
+
+    let mode: CameraMode
+    private let makeBackend: (SonyCameraManager) -> Backend
+    private var backend: Backend?
     private var activeUSBDeviceUUID: String?
     private var started = false
 
-    override init() {
+    init(mode: CameraMode = .launched, makeBackend: @escaping (SonyCameraManager) -> Backend = SonyCameraManager.liveBackend) {
+        self.mode = mode
+        self.makeBackend = makeBackend
         super.init()
-        deviceBrowser.delegate = self
+    }
+
+    private static func liveBackend(for manager: SonyCameraManager) -> Backend {
+        let loader = SonySDKLoader()
+        let browser = ICDeviceBrowser()
+        browser.delegate = manager
+        return Backend(
+            load: { loader.load() ? nil : (loader.lastErrorDescription ?? "Sony SDK failed to load.") },
+            startDiscovery: { browser.start() },
+            stopDiscovery: { browser.stop() }
+        )
     }
 
     func start() {
-        guard !started else { return }
+        guard mode == .native, !started else { return }
         started = true
 
-        if sdkLoader.load() {
-            ErrorLog.shared.log("Sony SDK loaded successfully.")
-            connectionStatus = .notConnected
-            deviceBrowser.start()
-        } else {
-            let reason = sdkLoader.lastErrorDescription ?? "Sony SDK failed to load."
+        let backend = self.backend ?? makeBackend(self)
+        self.backend = backend
+        if let reason = backend.load() {
             connectionStatus = .failed(reason: reason)
             ErrorLog.shared.log(reason)
-            // Keep USB discovery active even when SDK binaries are missing.
-            deviceBrowser.start()
+        } else {
+            ErrorLog.shared.log("Sony SDK loaded successfully.")
+            connectionStatus = .notConnected
         }
+        // Keep USB discovery active even when SDK binaries are missing.
+        backend.startDiscovery()
     }
 
     func stop() {
         guard started else { return }
         started = false
-        deviceBrowser.stop()
+        backend?.stopDiscovery()
     }
 }
 

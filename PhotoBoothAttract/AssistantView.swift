@@ -60,6 +60,7 @@ struct AssistantView: View {
     }
 
     private var cameraStatusColor: Color {
+        if sonyCameraManager.mode == .cooperative { return .blue }
         switch sonyCameraManager.connectionStatus {
         case .connected:
             return .green
@@ -71,17 +72,21 @@ struct AssistantView: View {
     }
 
     private var cameraStatusText: String {
+        if sonyCameraManager.mode == .cooperative { return "Camera: Cooperative" }
         switch sonyCameraManager.connectionStatus {
         case .connected(let model):
-            return "Camera: \(model)"
+            return "Camera (Native): \(model)"
         case .failed:
-            return "Camera: Connection failed"
+            return "Camera (Native): Connection failed"
         case .notConnected:
-            return "Camera: Not connected"
+            return "Camera (Native): Not connected"
         }
     }
 
     private var cameraStatusHelp: String {
+        if sonyCameraManager.mode == .cooperative {
+            return "Cooperative mode: Imaging Edge Desktop or another tethering app controls the camera. PBA only watches the selected folder."
+        }
         switch sonyCameraManager.connectionStatus {
         case .connected(let model):
             return "USB camera connected (\(model))"
