@@ -11,9 +11,9 @@ CAM-001 is a production tethering isolation fix, not an SDK feature milestone.
 
 **Reported:** During testing of the newly notarized app, the maintainer found that PBA's
 unfinished native camera path can take the camera away from Sony Imaging Edge Desktop (IED).
-There is no setting to keep PBA out of camera resources while IED supplies the hot folder.
+At report time there was no setting to keep PBA out of camera resources while IED supplies the hot folder.
 
-**Source verified:** [AppDelegate.swift](../PhotoBoothAttract/AppDelegate.swift) unconditionally
+**Source verified before the fix (`682673b`):** [AppDelegate.swift](../PhotoBoothAttract/AppDelegate.swift) unconditionally
 starts `SonyCameraManager` at launch. `start()` attempts to load the SDK dylibs and starts
 `ICDeviceBrowser` even when SDK loading fails. `stop()` stops only the browser; loaded SDK
 handles remain held until loader destruction. [SettingsView.swift](../PhotoBoothAttract/SettingsView.swift)
@@ -29,11 +29,18 @@ experimental camera path; it does not promise working capture or transfer. Keep 
 ingestion, printing and Messages drafts unchanged in both modes. Use restart-required mode
 changes for this first fix so a UI selection cannot falsely promise release of loaded resources.
 
-**Acceptance pending:** Automated mode/default/startup-isolation checks, settings/status UI
-checks, Debug build, and camera evidence on Intel and Apple Silicon. Verify IED transfer into
-the watched folder with Cooperative selected, through PBA launch/relaunch and camera reconnect.
-Verify Native opt-in and return to Cooperative across a full quit/relaunch. No local hardware
-reproduction or fix has been performed for this entry.
+**Software verified:** Code fix merged in PR #14 (`decacd6`). Independent review passed all
+16 camera-mode assertions, rejected the ungated temporary mutant with two expected failures,
+and reran the correct checks successfully on merged main. All 170 shared regressions and eight
+runner selector/reporting checks pass; the runner builds for arm64 and x86_64. The Debug build
+succeeds with a non-blocking actor-isolation warning on the default backend factory. Actual
+Cooperative app handlers and inspected screenshots verify the picker, help popover, restart
+notice, unchanged active badge after saving Native, and visible Save button in an isolated copy.
+
+**Hardware acceptance pending:** Verify IED transfer into the watched folder with Cooperative
+selected, through PBA launch/relaunch and camera reconnect, on Intel and Apple Silicon. Verify
+Native opt-in and return to Cooperative across a full quit/relaunch. No local camera/IED
+reproduction or Native relaunch was performed; native capture and transfer remain unqualified.
 
 ## High Priority
 
