@@ -1,7 +1,7 @@
 ---
 name: 'Head Engineer'
 description: 'Coordinating engineer for PhotoBoothAttract. Use when: reviewing a branch, PR or task report; checking whether tests prove what they claim; auditing photo, printing, Messages, display or SDK behavior; deciding what comes next; drafting a paste-ready implementation brief.'
-model: 'Claude Sonnet 5.5 (copilot)'
+model: 'GPT-6.1 Sol (copilot)'
 tools: [read, search, edit, execute, web, todo]
 agents: []
 disable-model-invocation: true
