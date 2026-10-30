@@ -76,6 +76,10 @@ func runCase(_ id: String, _ tier: String, _ title: String, _ body: () throws ->
 
 let args = Array(CommandLine.arguments.dropFirst())
 func option(_ name: String) -> String? { args.firstIndex(of: name).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
+if let target = option("--accessibility-worker").flatMap(Int32.init) {
+    serveAccessibility(target: target)
+    exit(0)
+}
 let appPath = option("--app")
 let reportPath = option("--report")
 let selfTest = args.contains("--self-test")
@@ -95,6 +99,7 @@ var ownedPrefsDomains: [String] = []
 
 /// Restores permissions and removes only what lives beneath the owned root; also stops the app instance this run launched.
 func cleanup() {
+    stopAccessibilityWorker()
     UserDefaults.standard.removePersistentDomain(forName: ProcessInfo.processInfo.processName)
     if let process = ownedProcess, process.isRunning { process.terminate(); usleep(300_000); if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
     ownedProcess = nil
@@ -250,41 +255,145 @@ func sampleClass(_ rep: NSBitmapImageRep, view: NSView, rect: CGRect) -> String 
     return votes.max { $0.value < $1.value }?.key ?? "none"
 }
 
-// MARK: - Accessibility of hosted windows (Accessibility API on our own process)
+// MARK: - Accessibility of hosted windows (external client, never self-process AX)
 
-struct AXNode {
-    let object: AXUIElement
+struct AXNode: Codable {
+    let object: Int
     let role: String, label: String, frame: CGRect, enabled: Bool, inSheet: Bool
 }
 
-/// SwiftUI builds its accessibility tree only for queries made off the main thread; the main run loop keeps spinning meanwhile.
-func onBackground<T>(_ fallback: T, _ work: @escaping () -> T) -> T {
-    var result: T?
-    DispatchQueue.global().async { let value = work(); DispatchQueue.main.async { result = value } }
-    let end = Date().addingTimeInterval(15)
-    while result == nil && Date() < end { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
-    return result ?? fallback
+enum AXOperation: String, Codable { case tree, press, enabled }
+struct AXRequest: Codable {
+    let operation: AXOperation
+    var title: String? = nil
+    var object: Int? = nil
+}
+struct AXReply: Codable {
+    var nodes: [AXNode] = []
+    var accepted = false
+    var enabled: Bool? = nil
+    var error: String? = nil
 }
 
-func axCollect(_ e: AXUIElement, _ depth: Int, _ inSheet: Bool, _ out: inout [AXNode]) {
+func serveAccessibility(target: pid_t) {
+    precondition(target != getpid())
+    signal(SIGTERM, SIG_DFL)
+    signal(SIGINT, SIG_DFL)
+    let app = AXUIElementCreateApplication(target)
+    AXUIElementSetMessagingTimeout(app, 5)
+    var objects: [AXUIElement] = []
+    while let line = readLine(), let data = line.data(using: .utf8) {
+        var reply = AXReply()
+        do {
+            let request = try JSONDecoder().decode(AXRequest.self, from: data)
+            switch request.operation {
+            case .tree:
+                if let window = (axValue(app, kAXWindowsAttribute) as? [AXUIElement])?.first(where: { (axValue($0, kAXTitleAttribute) as? String) == request.title }) {
+                    axCollect(window, 0, false, &reply.nodes, &objects)
+                }
+            case .press, .enabled:
+                if let index = request.object, objects.indices.contains(index) {
+                    if request.operation == .press {
+                        let element = objects[index]
+                        DispatchQueue.global().async {
+                            AXUIElementPerformAction(element, kAXPressAction as CFString)
+                        }
+                        reply.accepted = true
+                    } else {
+                        reply.enabled = axValue(objects[index], kAXEnabledAttribute) as? Bool
+                    }
+                } else { reply.error = "Accessibility element is no longer available" }
+            }
+        } catch { reply.error = "Accessibility request could not be decoded: \(error.localizedDescription)" }
+        guard let response = try? JSONEncoder().encode(reply) else { exit(3) }
+        FileHandle.standardOutput.write(response + Data([10]))
+    }
+}
+
+let accessibilityIO = DispatchQueue(label: "core-ui-accessibility")
+var accessibilityProcess: Process?
+var accessibilityInput: FileHandle?
+var accessibilityOutput: FileHandle?
+
+func stopAccessibilityWorker() {
+    try? accessibilityInput?.close()
+    if let process = accessibilityProcess {
+        if process.isRunning { process.terminate() }
+        process.waitUntilExit()
+    }
+    try? accessibilityOutput?.close()
+    accessibilityProcess = nil
+    accessibilityInput = nil
+    accessibilityOutput = nil
+}
+
+func accessibilityRequest(_ request: AXRequest) -> AXReply? {
+    if accessibilityProcess?.isRunning != true {
+        stopAccessibilityWorker()
+        let process = Process(), input = Pipe(), output = Pipe()
+        process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        process.arguments = ["--accessibility-worker", String(getpid())]
+        process.standardInput = input
+        process.standardOutput = output
+        do { try process.run() } catch {
+            failures.append("could not start Accessibility worker: \(error.localizedDescription)")
+            return nil
+        }
+        accessibilityProcess = process
+        accessibilityInput = input.fileHandleForWriting
+        accessibilityOutput = output.fileHandleForReading
+        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+    }
+    guard let input = accessibilityInput, let output = accessibilityOutput else { return nil }
+    let reply: AXReply? = onBackground(nil) {
+        accessibilityIO.sync {
+            do {
+                try input.write(contentsOf: JSONEncoder().encode(request) + Data([10]))
+                var response = Data()
+                while !response.contains(10) {
+                    let chunk = output.availableData
+                    guard !chunk.isEmpty else { return AXReply(error: "Accessibility worker exited before replying") }
+                    response.append(chunk)
+                }
+                return try JSONDecoder().decode(AXReply.self, from: response.prefix { $0 != 10 })
+            } catch { return AXReply(error: "Accessibility worker communication failed: \(error.localizedDescription)") }
+        }
+    }
+    if reply == nil {
+        failures.append("Accessibility worker timed out during \(request.operation.rawValue)")
+        stopAccessibilityWorker()
+    }
+    if let error = reply?.error { failures.append(error) }
+    return reply
+}
+
+/// Only pipe I/O runs in the background; the hosted UI keeps serving external AX requests on main.
+func onBackground<T>(_ fallback: T, _ work: @escaping () -> T) -> T {
+    var result: T?
+    let completed = DispatchSemaphore(value: 0)
+    DispatchQueue.global().async { result = work(); completed.signal() }
+    let end = Date().addingTimeInterval(15)
+    while Date() < end {
+        if completed.wait(timeout: .now()) == .success { return result ?? fallback }
+        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    }
+    return fallback
+}
+
+func axCollect(_ e: AXUIElement, _ depth: Int, _ inSheet: Bool, _ out: inout [AXNode], _ objects: inout [AXUIElement]) {
     guard depth < 40 else { return }
     let role = (axValue(e, kAXRoleAttribute) as? String) ?? ""
     let label = [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute, kAXHelpAttribute]
         .compactMap { axValue(e, $0) as? String }.filter { !$0.isEmpty }.joined(separator: " | ")
     let enabled = (axValue(e, kAXEnabledAttribute) as? Bool) ?? true
-    out.append(AXNode(object: e, role: role, label: label, frame: axFrame(e) ?? .zero, enabled: enabled, inSheet: inSheet))
-    for child in (axValue(e, kAXChildrenAttribute) as? [AXUIElement]) ?? [] { axCollect(child, depth + 1, inSheet || role == kAXSheetRole, &out) }
+    let index = objects.count
+    objects.append(e)
+    out.append(AXNode(object: index, role: role, label: label, frame: axFrame(e) ?? .zero, enabled: enabled, inSheet: inSheet))
+    for child in (axValue(e, kAXChildrenAttribute) as? [AXUIElement]) ?? [] { axCollect(child, depth + 1, inSheet || role == kAXSheetRole, &out, &objects) }
 }
 
 func tree(_ window: NSWindow, sheetsOnly: Bool = false) -> [AXNode] {
-    let title = window.title
-    let all: [AXNode] = onBackground([]) {
-        let app = AXUIElementCreateApplication(getpid())
-        guard let w = (axValue(app, kAXWindowsAttribute) as? [AXUIElement])?.first(where: { (axValue($0, kAXTitleAttribute) as? String) == title }) else { return [] }
-        var out: [AXNode] = []
-        axCollect(w, 0, false, &out)
-        return out
-    }
+    let all = accessibilityRequest(AXRequest(operation: .tree, title: window.title))?.nodes ?? []
     return sheetsOnly ? all.filter { $0.inSheet } : all
 }
 
@@ -299,7 +408,7 @@ func hasText(_ window: NSWindow, _ needle: String) -> Bool { !nodes(window, need
 func press(_ window: NSWindow, _ needle: String, index: Int = 0, sheetsOnly: Bool = false) -> Bool {
     let buttons = nodes(window, needle, role: kAXButtonRole, sheetsOnly: sheetsOnly).sorted { $0.frame.minY < $1.frame.minY }
     guard index < buttons.count else { failures.append("no button containing '\(needle)'\(index > 0 ? " #\(index)" : "")"); return false }
-    return AXUIElementPerformAction(buttons[index].object, kAXPressAction as CFString) == .success
+    return accessibilityRequest(AXRequest(operation: .press, object: buttons[index].object))?.accepted == true
 }
 
 func dumpTree(_ window: NSWindow) {
@@ -368,6 +477,7 @@ final class Host {
             window.attachedSheet.map { window.endSheet($0) }
             window.orderOut(nil)
         }
+        stopAccessibilityWorker()
         manager.setWatchedFolder(makeFolder("parked"))
         spin(0.2)
     }
@@ -592,19 +702,18 @@ func nativeCases() {
         waitFor("sheet A", 4) { window.attachedSheet != nil && hasText(window, "photo-3-blue.jpg") }
         let cancelA = nodes(window, "Cancel", role: kAXButtonRole, sheetsOnly: true).first?.object
 
-        // The share sink runs on main while A is still pending, and the main queue is busy then, so it uses element handles taken beforehand.
         stub.during = {
             stub.during = nil
             spin(0.3)
-            let enabled = cancelA.flatMap { axValue($0, kAXEnabledAttribute) as? Bool }
+            let enabled = cancelA.flatMap { accessibilityRequest(AXRequest(operation: .enabled, object: $0))?.enabled }
             if enabled != false { failures.append("Cancel enabled state while A is pending: \(String(describing: enabled))") }
             let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.attachedSheet?.windowNumber ?? 0,
                                           context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!
             _ = window.attachedSheet?.performKeyEquivalent(with: escape)
-            if let cancelA { AXUIElementPerformAction(cancelA, kAXPressAction as CFString) }
+            if let cancelA { _ = accessibilityRequest(AXRequest(operation: .press, object: cancelA)) }
             spin(0.3)
             if window.attachedSheet == nil { failures.append("Escape or Cancel dismissed a pending sheet") }
-            AXUIElementPerformAction(rowB, kAXPressAction as CFString)
+            _ = accessibilityRequest(AXRequest(operation: .press, object: rowB))
             spin(0.5)
         }
         press(window, "Send without number", sheetsOnly: true)
