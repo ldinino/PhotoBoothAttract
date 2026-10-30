@@ -462,7 +462,7 @@ printing or sending. Record hardware gaps as unverified, not passing results.
 ## Native CORE UI Runner
 
 **Status: built and verified on the development Mac (Apple Silicon, macOS 26.7.1); no Intel/TV or
-event-Mac result yet.** The roadmap item "Native UI validation runner" stays open until the device pass.
+event-Mac result yet.** Runner implementation is complete; its device acceptance stays open.
 
 **Build (development Mac only):** `bash scripts/build-core-ui-runner.sh` writes `dist/CoreUIRunner/`
 (git-ignored): a universal arm64 + x86_64 `CoreUIRunner` linked only against `/System` and `/usr/lib`
@@ -515,3 +515,60 @@ slice ran only under Rosetta here and is not Intel evidence.
 **Pending (record independently, sanitized model and exact OS):** Apple Silicon event-Mac pass; Intel Mac
 with the TV (N10, N11, A01, N09 responsiveness); physical printing; Messages draft (never press Send);
 the Select Folder open panel; display unplug/replug on the TV.
+
+## Messages Draft Text
+
+**Status:** Code merged in PR #16 (`b19ce59`); real Messages drafts on Intel and Apple Silicon
+remain untested. CORE acceptance remains open. See the
+[requirements](IMPLEMENTATION_SPEC.md#messages-draft-text).
+
+**Independent review:** All 182 regression assertions pass. The blank-default mutant was
+rejected with three expected failures, and the correct suite passed again, including on merged
+main. The arm64 Debug build and eight isolated real-app Settings checks pass; Settings-only
+screenshots were inspected. Save, unsaved dismissal, multiline text, blank text and relaunch
+persistence were verified. These checks do not establish actual Messages draft behavior or delivery.
+
+**Pending:** On Intel and Apple Silicon, verify editable addressed and recipient-free drafts
+contain the configured text and synthetic photo, or photo only when text is blank. Separately
+authorize draft checks; never press Send during routine validation.
+
+## Messages Attachment Metadata
+
+**Status:** Code merged in PR #17 (`e502847`); software checks pass. Real Messages drafts on
+Intel and Apple Silicon, and recipient-copy retention, remain pending. CORE acceptance stays
+open. See the [requirements and GPS policy](IMPLEMENTATION_SPEC.md#messages-attachment-metadata).
+
+**Implementation:** In [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift),
+`compressedCopy` bakes orientation into downsampled pixels and writes the source's ImageIO
+metadata (`CGImageMetadata`) with each encode, so the whole file counts against the 1 MB target.
+`outputMetadata` sets stored orientation to 1 and stored dimensions to the output size; the
+embedded preview is not carried over. Both draft paths share `attachmentURL`, and `openDraft`
+reads the GPS policy once per request.
+
+**Software evidence:** `bash scripts/check-folder-lifecycle.sh` reads production-generated
+attachments back with `CGImageSourceCopyPropertiesAtIndex` and `CGImageSourceCopyMetadataAtIndex`:
+attribution in TIFF, IPTC and XMP; orientations 1-8 and none at 2000 and 4000 px; resize; preview
+removal; missing metadata; a metadata-heavy file; both GPS policies; preference defaults; forced
+encode failure and undecodable-source fallbacks; and unchanged source bytes. Mutants that bypass
+stripping, let stripping requests fall back to raw bytes, or leave stored orientation/dimension
+tags stale are rejected.
+
+Staff reported Settings save, unsaved dismissal and relaunch persistence in the real Debug app.
+Independent review did not repeat those UI checks or access event preferences. Messages itself
+was not opened.
+
+**Independent review:** At `627a881`, all 313 regression assertions pass, including on merged
+main. Eight isolated preference checks pass; the exact old helper fails the integer-zero and
+floating-zero cases. GPS, raw-fallback and normalization mutants exit 1 with complete summaries
+of 19, 3 and 49 failures respectively; the correct suite passes again. The updated arm64 Debug
+build, universal arm64/x86_64 runner build, eight runner selector/reporting checks and synthetic
+N08 attachment case pass. No live printing or Messages action was performed.
+
+**Limits and pending device evidence:** Vendor MakerNotes are not guaranteed to round-trip.
+Standard XMP larger than one APP1 segment (about 64 KB) was not exercised. Recipient-side
+retention has not been verified. On Intel and Apple Silicon, inspect addressed and recipient-free
+drafts with synthetic photos under both GPS settings and compare sanitized exported fields
+(Artist, Copyright, orientation, dimensions and GPS) with the source. The
+[runner's manual checks](../scripts/core-ui-runner/main.swift) describe this separate pass.
+Recipient copies need separately authorized delivery evidence; export checks alone do not prove
+Messages or carrier retention. Print/save metadata behavior was not reviewed and is out of scope.

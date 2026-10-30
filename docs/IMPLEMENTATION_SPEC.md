@@ -102,6 +102,129 @@ If the guest only wants a digital copy, the assistant uses a different action an
 
 ---
 
+## Acceptance Requirements
+
+These requirements were moved from [ROADMAP.md](ROADMAP.md); moving them does not close
+any acceptance checks. Verification and remaining equipment gaps belong in
+[ENGINEERING_NOTES.md](ENGINEERING_NOTES.md) and [BUGS.md](BUGS.md).
+
+### CORE Acceptance Gate
+
+Before leaving CORE, all of the following must be met:
+
+- Every core punchlist item meets its linked acceptance checks, with fixing commits or PRs
+	and actual verification recorded in the engineering notes.
+- Regression checks cover ordering, stable action selection, file replacement, incomplete
+	writes, repeated events, folder changes and disappearing files. High-risk pure checks
+	reject a deliberately wrong implementation.
+- The actual Debug build passes. A real app launch confirms affected controls, empty/error
+	states, partial/full grids and single-display fallback.
+- Live hot-folder events, secondary-display lifecycle and older Intel Mac responsiveness
+	have device evidence. Printer and Messages checks are recorded separately from build
+	or simulated results; equipment blockers remain explicit.
+- The native UI runner drives the agreed CORE flows with synthetic fixtures and isolated
+	preferences, including pending cancellation and request-scoped sheet completion. It emits
+	per-case PASS/FAIL/SKIP, a summary and a failing exit code for failures; skipped/manual
+	checks are not passes. Use state-based waits, preserve event settings, restore permissions,
+	remove fixtures and close only app instances launched by the runner. Run the final pass
+	on the older Intel Mac with the TV and on Apple Silicon.
+- Developer ID signing, notarization, stapling and downloaded-build Gatekeeper checks in
+	[Notarized Distribution](#notarized-distribution) are complete.
+- Preserve original images except an explicitly confirmed clear, silent configured-printer
+	4x6 output, assistant-controlled sending, the current deployment target and non-sandboxed
+	architecture. Physical printing and Messages consumption/delivery need separately authorized
+	manual checks; no automatic sending or real printing as routine automation. Record only
+	sanitized evidence and model/OS information, not identifiers or raw diagnostic exports.
+
+Keep cleanup limited to touched core code: remove dead paths and misleading helpers without
+an architecture rewrite or visual redesign. SDK features, dependency changes and unrelated
+updater work are outside CORE acceptance. Mocks alone cannot close this gate.
+
+### Notarized Distribution
+
+Use the existing [release workflow](../scripts/build-release.sh). Confirm local access to a
+Developer ID Application certificate. Sign the app and nested code, including required Sony
+SDK libraries, with secure timestamps and compatible hardened-runtime settings; notarize
+and staple the result. Verify signatures, universal arm64/x86_64 app and SDK slices, and
+Gatekeeper behavior from a quarantined download on Intel and Apple Silicon.
+
+Preserve the deployment target, non-sandboxed architecture and SDK licensing/distribution
+assumptions. Keep certificates, private keys and notary credentials out of Git and chat.
+These checks do not authorize certificate export, OS security bypasses, release tags or publishing.
+
+### Messages Draft Text
+
+Allow the assistant to customize the text prefilled alongside a photo without changing code.
+Both addressed and recipient-free drafts use the same configured text. Messages remains an
+editable system draft; the assistant controls sending. Opening a draft is not proof of
+sending or delivery.
+
+A global multiline plain-text setting in
+[SettingsView.swift](../PhotoBoothAttract/SettingsView.swift), stored in `UserDefaults`,
+loads when Settings opens and persists only through Save.
+[MessageManager.swift](../PhotoBoothAttract/MessageManager.swift) reads it for every draft;
+both paths share one text/item builder and changes need no restart. A missing or non-string
+value uses `Thank you for choosing SD Photography. https://www.sd-photo.com/`.
+Blank or whitespace-only text means photo only; other text is kept exactly. Already-open
+drafts are unchanged. Templates, placeholders, per-customer data and a preview sheet are out of scope.
+
+**Acceptance:** Verify persistence, default/blank behavior and identical text selection in
+both draft paths with focused automated checks. Separately verify real drafts on Intel and
+Apple Silicon contain the configured text and photo, with and without a recipient, and remain
+editable without automatic sending. Use synthetic photos and placeholder recipients; do not
+send messages or record guest data as routine validation.
+
+### Messages Attachment Metadata
+
+Preserve standard EXIF/TIFF, IPTC and XMP metadata, especially camera-set Artist/creator and
+Copyright/rights fields, in the compressed photo handed to Messages. Apply to both addressed
+and recipient-free drafts; keep originals untouched. Use ImageIO properties and metadata APIs;
+vendor MakerNotes are not guaranteed to round-trip.
+
+For re-encoded copies, bake orientation into downsampled pixels and normalize stored
+orientation to 1. Update EXIF `PixelXDimension`, `PixelYDimension` and other stored dimensions
+to the actual output size. Remove or regenerate the embedded EXIF preview; do not retain
+conflicting orientation or dimension values in other metadata namespaces. Preserve the
+3000 px longest-edge cap, no upscaling and existing JPEG quality policy. Include metadata
+bytes in every quality-search and fallback encode. The 1 MB goal is a target, not a guaranteed maximum.
+
+**GPS policy (working decision, open for maintainer override):** an assistant-only Messages
+setting in [SettingsView.swift](../PhotoBoothAttract/SettingsView.swift), persisted by Save
+under `messagesStripGPS`, defaults to removal. Missing or non-Boolean saved values strip GPS;
+only an explicitly saved Boolean false retains it. Each attachment request reads the setting
+once. Remove the GPS property dictionary and every GPS metadata tag, then read the result
+back before use. If stripping is on and re-encoding fails or GPS remains, produce no attachment
+and log an error. Original-byte fallback is allowed only with stripping off; an encode failure
+must not bypass stripping or modify the original.
+
+**Acceptance:** Use synthetic fixtures with known EXIF/TIFF, IPTC and XMP fields, rotated
+orientation, an embedded preview and dummy GPS. Read attachments back with
+`CGImageSourceCopyPropertiesAtIndex` and `CGImageSourceCopyMetadataAtIndex`; compare preserved
+fields, orientation 1, actual versus stored dimensions, preview handling and both GPS modes.
+Cover missing metadata, metadata-heavy files near the size target, encode failures and fallbacks
+in both draft paths. Verify originals remain byte-for-byte unchanged.
+
+On Intel and Apple Silicon, inspect real addressed and recipient-free drafts under both GPS
+settings and compare sanitized exported fields with the source. Recipient-copy retention
+through Messages or carriers needs separate, authorized delivery evidence; exported attachments
+do not establish it. No automatic sending or guest data. Print/save metadata behavior is out of scope.
+
+### SDK Entry Gate
+
+CORE acceptance, including device qualification and notarized distribution, and acceptance of
+both high-priority Messages features are required before SDK implementation. Messages features
+do not close pending CORE items.
+
+After those gates, re-audit current code and the locally installed Sony SDK with relevant camera
+evidence. Only then create a separate SDK punchlist, choose repair versus rewrite and define
+scope and acceptance checks. [usb_cam_sonySDK.md](usb_cam_sonySDK.md) is historical investigation;
+library loading and USB discovery do not prove capture or file transfer.
+
+Keep the hot-folder product working. Direct capture, automatic sending, SDK distribution changes
+and new OS requirements require an explicit decision; old milestone labels do not define new scope.
+
+---
+
 ## Prompt Directives (Reference)
 
 The following can be reused for incremental or AI-assisted development:
