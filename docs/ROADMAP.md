@@ -1,6 +1,7 @@
 # Roadmap
 
-Core cleanup comes first. SDK work starts only after the core acceptance gate is met.
+Core cleanup comes first, followed by the two high-priority Messages features. SDK work
+starts only after the core acceptance gate and both feature acceptance checks are met.
 This roadmap is planned work, not release history or a claim that fixes have shipped.
 
 ## 1. Core Cleanup
@@ -50,31 +51,15 @@ evidence stays explicit; the overall CORE gate is not complete.
 Record equipment blockers explicitly; do not mark the gate complete on mocks alone.
 SDK changes, new camera features, dependency changes and unrelated updater work are out of scope.
 
-## 2. SDK Reassessment and Implementation
+## 2. High-Priority Messages Features
 
-**Status:** Deferred until the core acceptance gate is met, including final hardware validation and
-Developer ID signing/notarization readiness above.
-
-After core cleanup, re-audit the current SDK code and locally installed Sony SDK with
-relevant camera evidence. Then create a separate SDK punchlist and decide whether the
-integration should be repaired or rewritten. Do not create that punchlist during core cleanup.
-
-[usb_cam_sonySDK.md](usb_cam_sonySDK.md) is historical investigation, not proof of working
-initialization, camera control or transfer. Loading libraries or discovering a USB camera
-does not establish that captured images reach the app.
-
-Keep the hot-folder product working while SDK work proceeds. Do not add direct capture,
-automatic sending, SDK distribution changes or new OS requirements without an explicit decision.
-SDK scope, acceptance checks and sequencing will be defined with its later punchlist,
-not inferred from old milestone completion labels.
-
-## Feature Backlog
-
-These requests do not change the CORE gate or SDK sequencing above.
+After CORE acceptance, implement customizable draft text first, then metadata preservation.
+Both features are high priority and must meet their acceptance checks before SDK implementation.
+The CORE acceptance gate above remains unchanged; these features do not close pending CORE items.
 
 ### Customizable Messages Draft Text
 
-**Status:** Requested; not implemented. Priority not scheduled.
+**Status:** Requested; not implemented. High priority; required before SDK implementation.
 
 Allow the assistant to customize the message prefilled alongside a photo without changing
 code. Both addressed and recipient-free drafts must use the same configured text. Messages
@@ -103,7 +88,7 @@ do not send messages or record guest data as routine validation.
 
 ### Preserve Metadata in Messages Attachments
 
-**Status:** Requested; not implemented. Priority not scheduled.
+**Status:** Requested; not implemented. High priority; required before SDK implementation.
 
 Preserve standard photo metadata, especially camera-set Artist and Copyright information,
 in the compressed photo handed to Messages. Apply to both addressed and recipient-free
@@ -139,6 +124,26 @@ fallbacks in both draft paths. Verify original files remain byte-for-byte unchan
 Export checks do not prove Messages or carriers preserve metadata in the recipient's copy;
 that needs separate, authorized device evidence without automatic sending or guest data.
 Print/save metadata behavior has not been reviewed for this request and is out of scope.
+
+## 3. SDK Reassessment and Implementation
+
+**Status:** Deferred until the core acceptance gate is met, including final hardware validation
+and Developer ID signing/notarization readiness, and both high-priority Messages features above
+are implemented and verified.
+
+After core cleanup and both Messages features, re-audit the current SDK code and locally
+installed Sony SDK with relevant camera evidence. Then create a separate SDK punchlist and
+decide whether the integration should be repaired or rewritten. Do not create that punchlist
+during core cleanup or Messages feature work.
+
+[usb_cam_sonySDK.md](usb_cam_sonySDK.md) is historical investigation, not proof of working
+initialization, camera control or transfer. Loading libraries or discovering a USB camera
+does not establish that captured images reach the app.
+
+Keep the hot-folder product working while SDK work proceeds. Do not add direct capture,
+automatic sending, SDK distribution changes or new OS requirements without an explicit decision.
+SDK scope, acceptance checks and sequencing will be defined with its later punchlist,
+not inferred from old milestone completion labels.
 
 ## References
 
