@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		1C0E9FA22F536A7F00E4596B /* PhotoBooth Attract.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PhotoBooth Attract.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1C0E9FA22F536A7F00E4596B /* PhotoBooth Assistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PhotoBooth Assistant.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -54,7 +54,7 @@
 		1C0E9FA32F536A7F00E4596B /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1C0E9FA22F536A7F00E4596B /* PhotoBooth Attract.app */,
+				1C0E9FA22F536A7F00E4596B /* PhotoBooth Assistant.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -81,8 +81,8 @@
 			name = PhotoBoothAttract;
 			packageProductDependencies = (
 			);
-			productName = "PhotoBooth Attract";
-			productReference = 1C0E9FA22F536A7F00E4596B /* PhotoBooth Attract.app */;
+			productName = "PhotoBooth Assistant";
+			productReference = 1C0E9FA22F536A7F00E4596B /* PhotoBooth Assistant.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -319,7 +319,7 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PhotoBoothAttract/Info.plist;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "PhotoBooth Attract needs to control Messages to create message drafts with photos.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "PhotoBooth Assistant needs to control Messages to create message drafts with photos.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -328,7 +328,7 @@
 				MARKETING_VERSION = 1.1;
 				OTHER_CODE_SIGN_FLAGS = "--timestamp";
 				PRODUCT_BUNDLE_IDENTIFIER = ldinino.PhotoBoothAttract;
-				PRODUCT_NAME = "PhotoBooth Attract";
+				PRODUCT_NAME = "PhotoBooth Assistant";
 				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -369,7 +369,7 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PhotoBoothAttract/Info.plist;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "PhotoBooth Attract needs to control Messages to create message drafts with photos.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "PhotoBooth Assistant needs to control Messages to create message drafts with photos.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -378,7 +378,7 @@
 				MARKETING_VERSION = 1.1;
 				OTHER_CODE_SIGN_FLAGS = "--timestamp";
 				PRODUCT_BUNDLE_IDENTIFIER = ldinino.PhotoBoothAttract;
-				PRODUCT_NAME = "PhotoBooth Attract";
+				PRODUCT_NAME = "PhotoBooth Assistant";
 				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;

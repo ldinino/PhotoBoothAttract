@@ -892,7 +892,7 @@ if let only = option("--only") {
     }
 }
 
-say("PhotoBoothAttract CORE UI runner")
+say("PhotoBooth Assistant CORE UI runner")
 environmentReport(appInfo: appInfo)
 say("Isolation: runner preferences domain '\(ProcessInfo.processInfo.processName)'; fixtures under an owned temporary root; app cases use a copy with its own bundle identifier and HOME")
 say("")

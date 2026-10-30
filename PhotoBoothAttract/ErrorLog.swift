@@ -155,7 +155,7 @@ final class ErrorLog: ObservableObject {
         let url = logFileURL
         let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
         let dateStr = dateFormatter.string(from: Date()).replacingOccurrences(of: ":", with: "-").replacingOccurrences(of: " ", with: "_")
-        let exportURL = desktop.appendingPathComponent("PhotoBoothAttract_ErrorLog_\(dateStr).txt", isDirectory: false)
+        let exportURL = desktop.appendingPathComponent("PhotoBoothAssistant_ErrorLog_\(dateStr).txt", isDirectory: false)
 
         fileQueue.async { [weak self] in
             guard let self else { return }

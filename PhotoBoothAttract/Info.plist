@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>PhotoBooth Attract</string>
+	<string>PhotoBooth Assistant</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 </dict>

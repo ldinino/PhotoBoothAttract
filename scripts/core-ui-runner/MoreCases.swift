@@ -244,7 +244,7 @@ func appCases(app: URL?, info: [String: Any]?) {
     guard let app, let info else {
         for (id, title) in [("A01", "Actual-app launch, empty state, display lifecycle"), ("A02", "Actual-app saved-folder restoration, live arrivals, incomplete write, replacement, disappearance, refresh"),
                             ("A03", "Actual-app folder switch (relaunch on a second saved folder)"), ("A04", "Operator preferences and log untouched")] {
-            runCase(id, "APP", title) { throw Skip(reason: "no app bundle supplied (--app path/to/PhotoBoothAttract.app)") }
+            runCase(id, "APP", title) { throw Skip(reason: "no app bundle supplied (--app \"path/to/PhotoBooth Assistant.app\")") }
         }
         return
     }
@@ -258,6 +258,10 @@ func appCases(app: URL?, info: [String: Any]?) {
         guard instance.launch() else { return }
         defer { instance.quit() }
         waitFor("empty-state message", 10) { instance.has("No photos yet") }
+        if let displayName = info["CFBundleDisplayName"] as? String ?? info["CFBundleName"] as? String {
+            expect(instance.has("About \(displayName)"), "About menu does not use the app display name")
+            expect(instance.has("Quit \(displayName)"), "Quit menu does not use the app display name")
+        }
         let titles = instance.windows().map { $0.title }
         expect(titles.contains("PhotoBooth Assistant"), "assistant window missing: \(titles)")
         if NSScreen.screens.count == 1 {

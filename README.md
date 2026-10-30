@@ -1,4 +1,4 @@
-# PhotoBooth Attract
+# PhotoBooth Assistant
 
 A macOS app for event photo-booth workflows: show the latest photos on a guest-facing TV, and let an assistant print and send images via iMessage from a second screen.
 
@@ -25,7 +25,7 @@ A macOS app for event photo-booth workflows: show the latest photos on a guest-f
 2. Select the **PhotoBoothAttract** scheme and a run destination (e.g. My Mac).
 3. Build and run (⌘R).
 
-The app is a **non-sandboxed** utility so it can access arbitrary folders and printers. Debug and Release builds use the maintainer's **Developer ID Application** certificate (team `TW9Z5U2FJ9`), including the bundled Sony SDK libraries, with hardened runtime enabled. The certificate and its private key must be installed locally; neither belongs in the repository. The built app is named **PhotoBooth Attract.app**; the scheme and bundle identifier are unchanged.
+The app is a **non-sandboxed** utility so it can access arbitrary folders and printers. Debug and Release builds use the maintainer's **Developer ID Application** certificate (team `TW9Z5U2FJ9`), including the bundled Sony SDK libraries, with hardened runtime enabled. The certificate and its private key must be installed locally; neither belongs in the repository. The built app is named **PhotoBooth Assistant.app**. The project and scheme remain `PhotoBoothAttract`; the bundle identifier `ldinino.PhotoBoothAttract`, saved settings, persistent log location and GitHub update feed are unchanged. Existing updates replace the installed app in place and may retain its older filename.
 
 ### Signed release builds
 
@@ -36,7 +36,7 @@ xcrun notarytool store-credentials PhotoBoothAttract
 NOTARY_KEYCHAIN_PROFILE=PhotoBoothAttract bash scripts/build-release.sh
 ```
 
-The script checks credentials before replacing build outputs, builds for Apple Silicon and Intel, submits the app to Apple, staples and validates the ticket, and checks Gatekeeper before creating the final `dist/PhotoBoothAttract-v<version>.zip`. It does not publish a release or install the app. The existing offline UI runner still uses intentionally ad-hoc-signed test copies; that test-only workflow is separate from notarized app distribution.
+The script checks credentials before replacing build outputs, builds for Apple Silicon and Intel, submits the app to Apple, staples and validates the ticket, and checks Gatekeeper before creating the final `dist/PhotoBoothAssistant-v<version>.zip`. It does not publish a release or install the app. The existing offline UI runner still uses intentionally ad-hoc-signed test copies; that test-only workflow is separate from notarized app distribution.
 
 ## Usage
 
@@ -52,7 +52,7 @@ The script checks credentials before replacing build outputs, builds for Apple S
 
 ## Settings
 
-**PhotoBooth Attract → Settings…**
+**PhotoBooth Assistant → Settings…**
 
 - **Printer** — Pick the 4×6 photo printer from the list (or type the exact name). Default is Canon Selphy CP1500. Save to apply.
 

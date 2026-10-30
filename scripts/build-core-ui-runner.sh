@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds the offline CORE UI runner (arm64 + x86_64) into dist/CoreUIRunner/. Development Mac only;
-# the target needs nothing but that folder and a PhotoBooth Attract.app.
+# the target needs nothing but that folder and a PhotoBooth Assistant.app.
 # RUNNER_MUTANT=layout|dismiss|cancel builds a deliberately wrong guest layout / sheet-completion guard /
 # pending-Cancel guard; the runner must then FAIL.
 set -euo pipefail
@@ -43,9 +43,10 @@ codesign --force --sign - "$OUT/CoreUIRunner"
 cat > "$OUT/run-core-ui.command" <<'LAUNCH'
 #!/bin/bash
 cd "$(dirname "$0")"
-APP="./App/PhotoBooth Attract.app"
+APP="./App/PhotoBooth Assistant.app"
+[ -d "$APP" ] || APP="./App/PhotoBooth Attract.app"
 [ -d "$APP" ] || APP="./App/PhotoBoothAttract.app"
-[ -d "$APP" ] || { echo "Put PhotoBooth Attract.app in the App folder next to this script, then run again."; read -r -p "Press Return to close."; exit 3; }
+[ -d "$APP" ] || { echo "Put PhotoBooth Assistant.app in the App folder next to this script, then run again."; read -r -p "Press Return to close."; exit 3; }
 mkdir -p reports
 ./CoreUIRunner --app "$APP" --report "reports/core-ui-$(date +%Y%m%d-%H%M%S).txt" "$@"
 code=$?
@@ -56,10 +57,10 @@ LAUNCH
 chmod +x "$OUT/run-core-ui.command"
 
 cat > "$OUT/INSTRUCTIONS.txt" <<'TXT'
-PhotoBooth Attract CORE UI runner (offline; no install, no Xcode, no network)
+PhotoBooth Assistant CORE UI runner (offline; no install, no Xcode, no network)
 
 1. Copy this whole folder to the target Mac (USB drive or AirDrop).
-2. Put a Release (universal) PhotoBooth Attract.app inside the App folder (the older PhotoBoothAttract.app name also works).
+2. Put a Release (universal) PhotoBooth Assistant.app inside the App folder (the older PhotoBooth Attract.app and PhotoBoothAttract.app names also work).
    The runner never modifies it. For app cases it launches a throwaway copy (own bundle identifier, ad-hoc
    re-signed with the system codesign) so preferences, window state and the log stay separate from yours.
 3. Leave any running event session alone; the runner never quits or touches it. It stops only the copy it started.

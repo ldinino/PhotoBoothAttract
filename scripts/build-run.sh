@@ -5,7 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$PROJECT_DIR/PhotoBoothAttract.xcodeproj"
 SCHEME="PhotoBoothAttract"
 CONFIG="Debug"
-APP_NAME="PhotoBooth Attract"
+APP_NAME="PhotoBooth Assistant"
 DERIVED_DATA="/tmp/PhotoBoothAttract-build-debug"
 
 echo "==> Building $SCHEME ($CONFIG)..."
