@@ -436,6 +436,11 @@ the final CORE UI runner; these checks do not qualify physical display placement
    numbering and matching assistant badges.
 2. Resize and reconnect the guest display; confirm framing and unchanged single-display fallback.
 
+**2026-10-30 update:** The Intel runner covers both display configurations; the maintainer also
+reports repeated live TV plug/unplug working throughout testing and accepts that check as closed
+on the tested setup. This does not close unreported resolution-change checks or the Apple Silicon
+placement failure. See the [current device evidence](#native-core-ui-runner).
+
 ## Verification Conventions
 
 Use the actual Xcode project and [build workflow](../scripts/build-run.sh).
@@ -461,8 +466,9 @@ printing or sending. Record hardware gaps as unverified, not passing results.
 
 ## Native CORE UI Runner
 
-**Status: built and verified on the development Mac (Apple Silicon, macOS 26.7.1); no Intel/TV or
-event-Mac result yet.** Runner implementation is complete; its device acceptance stays open.
+**Status: runner implementation complete; native Intel target runs pass with and without the TV.**
+The current Apple Silicon run has an open N11 assistant-placement failure; its single-display pass
+is outstanding. The overall device acceptance gate remains open.
 
 **Build (development Mac only):** `bash scripts/build-core-ui-runner.sh` writes `dist/CoreUIRunner/`
 (git-ignored): a universal arm64 + x86_64 `CoreUIRunner` linked only against `/System` and `/usr/lib`
@@ -512,9 +518,31 @@ dismissal on late completion) fails N04, `cancel` (Cancel not disabled while pen
 fixtures. The artifact ran from a copy with an empty `PATH` (no compiler or package manager). The x86_64
 slice ran only under Rosetta here and is not Intel evidence.
 
-**Pending (record independently, sanitized model and exact OS):** Apple Silicon event-Mac pass; Intel Mac
-with the TV (N10, N11, A01, N09 responsiveness); physical printing; Messages draft (never press Send);
-the Select Folder open panel; display unplug/replug on the TV.
+**Target-Mac evidence (2026-10-30):** The maintainer supplied reports from MacBookPro9,2,
+macOS 15.8.2 (24H232), native x86_64, runner `a1bbb52`, app 1.1 (build 17). With the TV:
+14 PASS, 0 FAIL, N10 SKIP (two displays). Without the TV: 14 PASS, 0 FAIL, N11 SKIP (one display).
+Independent report inspection confirmed all 15 case IDs passed across the complementary runs;
+neither skipped case is counted as a pass in its original run. Worst scan stalls were 0.126 s
+and 0.125 s against the 0.75 s bound; peak resident memory was 376 MB in both runs.
+
+**Maintainer live-I/O evidence (2026-10-30):** The maintainer reports good physical prints and
+digital copies from real camera photos, both before and after the compressor change, including
+the current kit app. This qualifies the target-Mac print/send happy path, not every failure or
+Messages edge case. Repeated live TV plug/unplug was reported stable throughout testing; the
+maintainer accepts that check as closed on the tested setup. No guest photos or raw reports
+are committed with this evidence.
+
+**Current development-Mac result (2026-10-30):** On Apple Silicon Mac13,2, macOS 26.7.1,
+runner `a1bbb52` with the current universal Release app: 13 PASS, 1 FAIL, 1 SKIP. N11 reports
+the assistant window is not on the primary display and fails again in an isolated N11/A01 run;
+A01 actual-app launch/guest placement passes. N10 skips because three displays are attached.
+This result does not qualify Apple Silicon placement or single-display fallback.
+
+**Pending:** Resolve the Apple Silicon placement result and complete its single-display pass;
+the Select Folder open panel; unavailable-printer and remaining real Messages cases in the
+linked CORE notes; camera/IED restart and reconnect checks in [BUGS.md](BUGS.md); and
+[notarized-download qualification](IMPLEMENTATION_SPEC.md#notarized-distribution).
+Live TV plug/unplug on the tested target setup is no longer pending.
 
 ## Messages Draft Text
 
@@ -534,8 +562,9 @@ authorize draft checks; never press Send during routine validation.
 
 ## Messages Attachment Metadata
 
-**Status:** Code merged in PR #17 (`e502847`); software checks pass. Real Messages drafts on
-Intel and Apple Silicon, and recipient-copy retention, remain pending. CORE acceptance stays
+**Status:** Code merged in PR #17 (`e502847`); software checks and the inspected real sample's
+attribution check pass. Remaining draft-path/GPS qualification on Intel and Apple Silicon,
+and recipient-copy retention across the required routes, remain pending. CORE acceptance stays
 open. See the [requirements and GPS policy](IMPLEMENTATION_SPEC.md#messages-attachment-metadata).
 
 **Implementation:** In [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift),
@@ -563,6 +592,14 @@ floating-zero cases. GPS, raw-fallback and normalization mutants exit 1 with com
 of 19, 3 and 49 failures respectively; the correct suite passes again. The updated arm64 Debug
 build, universal arm64/x86_64 runner build, eight runner selector/reporting checks and synthetic
 N08 attachment case pass. No live printing or Messages action was performed.
+
+**Real sample evidence (2026-10-30):** Read-only ImageIO inspection of the maintainer's corrected
+compressed sample found Artist/creator and Copyright/rights in TIFF, IPTC and XMP. The JPEG
+was 673,354 bytes, 3000x2000, orientation 1, with matching EXIF dimensions and no GPS dictionary
+or GPS tags. The first sample's camera had no copyright information configured, per the
+maintainer; it was not evidence of attribution loss. The maintainer accepts attribution for
+the corrected sample as verified. No sample image, personal attribution values or export is
+committed. GPS absence alone does not demonstrate removal from a GPS-bearing original.
 
 **Limits and pending device evidence:** Vendor MakerNotes are not guaranteed to round-trip.
 Standard XMP larger than one APP1 segment (about 64 KB) was not exercised. Recipient-side
