@@ -32,7 +32,9 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
 
     /// Removing GPS is the default; only an explicit saved false keeps it.
     static func stripsGPS(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: stripGPSKey) as? Bool ?? true
+        guard let value = defaults.object(forKey: stripGPSKey) as? NSNumber,
+              CFGetTypeID(value) == CFBooleanGetTypeID() else { return true }
+        return value.boolValue
     }
 
     static func draftItems(text: String?, attachment: URL) -> [Any] {

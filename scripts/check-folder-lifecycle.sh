@@ -898,10 +898,10 @@ for strip in [true, false] {
 let mdNoisy = mdSource(1200, 850, orientation: nil, tags: false, gps: false, noise: true)
 let mdNoisyHeavy = mdSource(1200, 850, orientation: 1, tags: true, gps: true, heavy: 60_000, noise: true)
 let mdLight = mdAttach(mdNoisy, strip: true), mdHeavy = mdAttach(mdNoisyHeavy, strip: true)
-let mdLightSize = (try? atfm.attributesOfItem(atPath: mdLight.url!.path)[.size] as? Int) ?? 0
-let mdHeavySize = (try? atfm.attributesOfItem(atPath: mdHeavy.url!.path)[.size] as? Int) ?? 0
+func mdSize(_ url: URL?) -> Int { url.flatMap { (try? atfm.attributesOfItem(atPath: $0.path)[.size] as? Int) ?? 0 } ?? 0 }
+let mdLightSize = mdSize(mdLight.url), mdHeavySize = mdSize(mdHeavy.url)
 check("metadata heavy: noisy photo is searched toward the 1 MB target (\(mdLightSize) bytes)", mdLightSize > 0 && mdLightSize <= 1_048_576 && mdLightSize > 700_000)
-check("metadata heavy: metadata bytes count toward the target (\(mdHeavySize) bytes), attribution kept, no GPS", mdHeavySize > 0 && mdHeavySize <= 1_048_576 && mdKept(mdHeavy.r!) && !mdHasGPS(mdHeavy.r!))
+check("metadata heavy: metadata bytes count toward the target (\(mdHeavySize) bytes), attribution kept, no GPS", mdHeavySize > 0 && mdHeavySize <= 1_048_576 && mdHeavy.r.map { mdKept($0) && !mdHasGPS($0) } == true)
 for a in [mdLight.url, mdHeavy.url] { if let a { try? atfm.removeItem(at: a.deletingLastPathComponent()) } }
 
 // Fallbacks follow the GPS policy
@@ -932,7 +932,7 @@ let gpSuite = "folder-lifecycle-checks.gps"
 let gpDefaults = UserDefaults(suiteName: gpSuite)!
 gpDefaults.removePersistentDomain(forName: gpSuite)
 check("gps policy: missing preference strips", MessageManager.stripsGPS(defaults: gpDefaults))
-for bad in ["no", ["a"], Data([1]), 3.5] as [Any] {
+for bad in ["no", ["a"], Data([1]), 3.5, 0, 1, 0.0, 1.0, "false"] as [Any] {
     gpDefaults.set(bad, forKey: MessageManager.stripGPSKey)
     check("gps policy: invalid \(type(of: bad)) strips", MessageManager.stripsGPS(defaults: gpDefaults))
 }
