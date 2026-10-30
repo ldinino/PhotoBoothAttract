@@ -836,6 +836,9 @@ func nativeCases() {
 let manualChecks = [
     "Physical 4x6 print on the configured printer (separately authorized; a queued job is not a printed photo)",
     "Messages draft opens with the right image and recipient (separately authorized; never press Send)",
+    "Messages drafts, addressed and recipient-free, on Intel and Apple Silicon with a synthetic photo: configured text above the photo, or photo only when the text is blank (separately authorized; never press Send)",
+    "Messages attachment metadata with a synthetic photo carrying Artist, Copyright and dummy GPS: export the draft file under both GPS settings and compare sanitized fields (Artist, Copyright, orientation, dimensions, GPS present or absent) with the source",
+    "Recipient-copy metadata retention through Messages and carriers (separately authorized delivery evidence; an exported file does not show it)",
     "NSOpenPanel 'Select Folder' flow",
     "Intel Mac responsiveness with the real TV and a live camera/Sony Image Desktop folder",
     "Secondary display unplug/replug and resolution change on the TV",

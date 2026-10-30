@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var availablePrinters: [String] = []
     @State private var watermarkText: String = ""
     @State private var messageText = ""
+    @State private var stripGPS = MessageManager.stripsGPS()
     @State private var saved = false
     @State private var cameraMode = CameraMode.resolve()
     @State private var savedCameraMode = CameraMode.resolve()
@@ -89,6 +90,10 @@ struct SettingsView: View {
                     Text("Text added to each Messages draft with the photo. Leave blank to send the photo only.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Toggle("Remove GPS location from photos", isOn: $stripGPS)
+                    Text("Other photo details, such as photographer and copyright, are kept. If GPS cannot be removed, the photo is not attached.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
@@ -106,6 +111,7 @@ struct SettingsView: View {
                     PrintManager.shared.configuredPrinterName = printerName
                     UserDefaults.standard.set(watermarkText, forKey: GuestGridConfig.watermarkKey)
                     UserDefaults.standard.set(messageText, forKey: MessageManager.messageTextKey)
+                    UserDefaults.standard.set(stripGPS, forKey: MessageManager.stripGPSKey)
                     UserDefaults.standard.set(cameraMode.rawValue, forKey: CameraMode.key)
                     savedCameraMode = cameraMode
                     saved = true
@@ -124,6 +130,7 @@ struct SettingsView: View {
             availablePrinters = PrintManager.shared.availablePrinters()
             watermarkText = UserDefaults.standard.string(forKey: GuestGridConfig.watermarkKey) ?? ""
             messageText = MessageManager.draftText() ?? ""
+            stripGPS = MessageManager.stripsGPS()
         }
     }
 }

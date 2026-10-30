@@ -40,8 +40,8 @@ func moreCases() {
         let first = writeNumbered(1, in: folder, name: "same-name.jpg")
         let firstBytes = try! Data(contentsOf: first), firstHash = sha(first)
         let second = writeNumbered(2, in: makeFolder("attach2"), name: "same-name.jpg")
-        let a = MessageManager.shared.attachmentURL(for: firstBytes, name: "same-name.jpg")
-        let b = MessageManager.shared.attachmentURL(for: try! Data(contentsOf: second), name: "same-name.jpg")
+        let a = MessageManager.shared.attachmentURL(for: firstBytes, name: "same-name.jpg", stripGPS: true)
+        let b = MessageManager.shared.attachmentURL(for: try! Data(contentsOf: second), name: "same-name.jpg", stripGPS: true)
         created += [a, b].compactMap { $0 }
         expect(a != nil && b != nil && a!.deletingLastPathComponent() != b!.deletingLastPathComponent(), "same-named requests share a directory")
         expect(a.flatMap { try? Data(contentsOf: $0) } != b.flatMap { try? Data(contentsOf: $0) }, "same-named requests share bytes")
@@ -49,7 +49,7 @@ func moreCases() {
 
         for (name, png, portrait) in [("landscape.jpg", false, false), ("portrait.jpg", false, true), ("landscape.png", true, false), ("portrait.png", true, true)] {
             let url = writeNumbered(3, in: folder, name: name, png: png, portrait: portrait)
-            guard let out = MessageManager.shared.attachmentURL(for: try! Data(contentsOf: url), name: name) else { failures.append("\(name): no attachment"); continue }
+            guard let out = MessageManager.shared.attachmentURL(for: try! Data(contentsOf: url), name: name, stripGPS: true) else { failures.append("\(name): no attachment"); continue }
             created.append(out)
             let size = CGImageSourceCreateWithURL(out as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }.map { ($0.width, $0.height) }
             expect(size.map { portrait ? $0.1 > $0.0 : $0.0 > $0.1 } == true, "\(name): attachment aspect \(String(describing: size))")
@@ -62,7 +62,7 @@ func moreCases() {
             writeImage(ctx.makeImage()!, to: url, type: .jpeg, orientation: orientation, quality: 0.95)
             let want = expectedCorners(orientation: orientation)
 
-            if let out = MessageManager.shared.attachmentURL(for: try! Data(contentsOf: url), name: url.lastPathComponent),
+            if let out = MessageManager.shared.attachmentURL(for: try! Data(contentsOf: url), name: url.lastPathComponent, stripGPS: true),
                let image = CGImageSourceCreateWithURL(out as CFURL, nil).flatMap({ CGImageSourceCreateImageAtIndex($0, 0, nil) }) {
                 created.append(out)
                 expect(cornerClasses(image) == want, "EXIF \(orientation) attachment corners \(cornerClasses(image)), want \(want)")
