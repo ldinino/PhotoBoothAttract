@@ -33,7 +33,7 @@ changes for this first fix so a UI selection cannot falsely promise release of l
 16 camera-mode assertions, rejected the ungated temporary mutant with two expected failures,
 and reran the correct checks successfully on merged main. All 170 shared regressions and eight
 runner selector/reporting checks pass; the runner builds for arm64 and x86_64. The Debug build
-succeeds with a non-blocking actor-isolation warning on the default backend factory. Actual
+succeeds; PR #15 (`51f4ffa`) removes the default-backend factory actor-isolation warning. Actual
 Cooperative app handlers and inspected screenshots verify the picker, help popover, restart
 notice, unchanged active badge after saving Native, and visible Save button in an isolated copy.
 
