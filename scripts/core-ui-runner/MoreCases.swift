@@ -31,6 +31,17 @@ func expectedCorners(orientation: Int) -> [String: String] {
     return result
 }
 
+/// Centering must hold for nonzero/negative origins, oversize windows and portrait screens.
+func expectCenteringGeometry() {
+    let visible = NSRect(x: -1440, y: 200, width: 1440, height: 800)
+    let centered = AppDelegate.centeredFrame(size: NSSize(width: 1024, height: 768), in: visible)
+    expect(centered == NSRect(x: -1232, y: 216, width: 1024, height: 768), "negative-origin centering: \(centered)")
+    let shrunk = AppDelegate.centeredFrame(size: NSSize(width: 2000, height: 2000), in: visible)
+    expect(shrunk == visible, "oversize window not fitted: \(shrunk)")
+    let portrait = NSRect(x: 100, y: -300, width: 900, height: 1600)
+    expect(portrait.contains(AppDelegate.centeredFrame(size: NSSize(width: 1024, height: 768), in: portrait)), "portrait result escapes the screen")
+}
+
 func moreCases() {
     runCase("N08", "NATIVE", "Attachment isolation and orientation (EXIF 1-8 JPEG, portrait/landscape JPEG+PNG); no Messages draft") {
         let folder = makeFolder("attach")
@@ -106,16 +117,19 @@ func moreCases() {
     }
 
     runCase("N10", "NATIVE", "Single-display fallback (real AppDelegate window setup)") {
+        expectCenteringGeometry()
         guard NSScreen.screens.count == 1 else { throw Skip(reason: "\(NSScreen.screens.count) displays attached; needs exactly one. Run with only the built-in display to qualify.") }
         let delegate = AppDelegate()
         delegate.sonyCameraManager = SonyCameraManager()
         delegate.setupWindows()
         expect(delegate.assistantWindow.isVisible, "assistant window not visible")
         expect(delegate.guestWindow == nil || delegate.guestWindow?.isVisible == false, "guest window shown with one display")
+        expect(NSScreen.screens[0].visibleFrame.contains(delegate.assistantWindow.frame), "assistant \(delegate.assistantWindow.frame) not inside primary visible \(NSScreen.screens[0].visibleFrame)")
         delegate.assistantWindow.orderOut(nil)
     }
 
     runCase("N11", "NATIVE", "Dual-display placement (real AppDelegate window setup)") {
+        expectCenteringGeometry()
         guard NSScreen.screens.count > 1 else { throw Skip(reason: "only one display attached; connect the TV and rerun") }
         let delegate = AppDelegate()
         delegate.sonyCameraManager = SonyCameraManager()
@@ -124,10 +138,13 @@ func moreCases() {
         let secondary = NSScreen.screens[1].frame
         expect(delegate.guestWindow?.frame == secondary, "guest frame \(String(describing: delegate.guestWindow?.frame)) != secondary \(secondary)")
         expect(delegate.guestWindow?.isVisible == true, "guest window hidden")
-        expect(NSScreen.screens[0].frame.intersects(delegate.assistantWindow.frame), "assistant window not on the primary display")
+        expect(NSScreen.screens[0].visibleFrame.contains(delegate.assistantWindow.frame), "assistant window \(delegate.assistantWindow.frame) not inside primary visible frame \(NSScreen.screens[0].visibleFrame)")
         let guestFrame = delegate.guestWindow?.frame
         delegate.refreshDisplayLayout()
         expect(delegate.guestWindow?.frame == guestFrame, "second refresh moved or recreated the guest window")
+        delegate.assistantWindow.setFrameOrigin(NSPoint(x: secondary.midX, y: secondary.midY))
+        delegate.refreshDisplayLayout()
+        expect(NSScreen.screens[0].visibleFrame.contains(delegate.assistantWindow.frame), "refresh did not return assistant to primary: \(delegate.assistantWindow.frame)")
     }
 }
 
@@ -264,6 +281,10 @@ func appCases(app: URL?, info: [String: Any]?) {
         }
         let titles = instance.windows().map { $0.title }
         expect(titles.contains("PhotoBooth Assistant"), "assistant window missing: \(titles)")
+        let primary = NSScreen.screens[0]
+        let primaryAX = CGRect(x: primary.visibleFrame.minX, y: primary.frame.maxY - primary.visibleFrame.maxY, width: primary.visibleFrame.width, height: primary.visibleFrame.height).insetBy(dx: -2, dy: -2)
+        let assistant = instance.windows().first { $0.title == "PhotoBooth Assistant" }?.frame
+        expect(assistant.map(primaryAX.contains) == true, "assistant frame \(String(describing: assistant)) not inside primary (AX coordinates) \(primaryAX)")
         if NSScreen.screens.count == 1 {
             expect(!titles.contains("Guest TV") || instance.windows().first { $0.title == "Guest TV" }?.frame == nil, "guest window present on a single display")
         } else {

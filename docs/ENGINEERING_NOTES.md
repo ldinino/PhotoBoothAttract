@@ -467,7 +467,7 @@ printing or sending. Record hardware gaps as unverified, not passing results.
 ## Native CORE UI Runner
 
 **Status: runner implementation complete; native Intel target runs pass with and without the TV.**
-The current Apple Silicon run has an open N11 assistant-placement failure; its single-display pass
+The Apple Silicon N11 placement failure is fixed on this branch (see below); its single-display pass
 is outstanding. The overall device acceptance gate remains open.
 
 **Build (development Mac only):** `bash scripts/build-core-ui-runner.sh` writes `dist/CoreUIRunner/`
@@ -538,7 +538,20 @@ the assistant window is not on the primary display and fails again in an isolate
 A01 actual-app launch/guest placement passes. N10 skips because three displays are attached.
 This result does not qualify Apple Silicon placement or single-display fallback.
 
-**Pending:** Resolve the Apple Silicon placement result and complete its single-display pass;
+**Assistant placement fix (2026-10-30, Mac13,2, macOS 26.7.1, three displays incl. portrait and
+negative-origin):** Cause: `center()` centers on the window's current screen, and the frame
+autosave restored the saved frame after it, so the assistant could land on a non-primary display
+(N11 against the original code: assistant at x=-1792 vs primary visible frame 0,67,2560x1343;
+refresh did not return it). Fix: `AppDelegate` centers the assistant in `screens[0].visibleFrame`
+on setup and every refresh; guest placement and reuse are unchanged. N10/N11 now require the
+assistant inside the primary visible frame, N11 also moves it to the secondary and checks that a
+refresh returns it, and A01 checks the actual app's assistant frame in Accessibility coordinates.
+Result with the fix on the Debug app: N11, A01, A04 PASS, N10 SKIP (three displays); the same
+runner against the original code FAILS N11 (A01 still passed there, because an isolated launch
+does not by itself reproduce the focus/autosave case). Single-display and Intel placement remain
+unverified.
+
+**Pending:** Single-display placement pass (N10) and Intel placement recheck;
 the Select Folder open panel; unavailable-printer and remaining real Messages cases in the
 linked CORE notes; camera/IED restart and reconnect checks in [BUGS.md](BUGS.md); and
 [notarized-download qualification](IMPLEMENTATION_SPEC.md#notarized-distribution).
