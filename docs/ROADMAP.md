@@ -89,8 +89,8 @@ do not send messages or record guest data as routine validation.
 
 ### Preserve Metadata in Messages Attachments
 
-**Status:** Implemented on branch `feat/preserve-message-metadata`; pending audit and merge.
-Software checks pass (see Acceptance). Real Messages drafts on Intel and Apple Silicon, and
+**Status:** Code merged in PR #17 (`e502847`). Independent software checks pass (see evidence
+below). Real Messages drafts on Intel and Apple Silicon, and
 recipient-copy retention, are deferred to the final hardware gate. High priority; required
 before SDK implementation. CORE acceptance remains open.
 
@@ -125,8 +125,9 @@ logged; the original-byte fallback is used only when stripping is off.
 - Preserve the 3000 px longest-edge cap, no upscaling and existing JPEG quality policy.
 	Include metadata bytes in each quality-search and fallback encode. The existing 1 MB
 	sizing goal remains a target, not a guaranteed maximum.
-- Offer assistant-only GPS stripping; confirm its default and persistence before
-	implementation. Apply the chosen policy consistently, including the original-byte
+- Assistant-only GPS stripping defaults to removal and persists through Save. Missing or
+	non-Boolean saved values strip GPS; only a saved Boolean false retains it. Apply the policy
+	consistently, including the original-byte
 	fallback. An encode failure must not silently bypass GPS stripping or modify the original.
 
 **Acceptance:** Use synthetic fixtures with known EXIF/TIFF, IPTC and XMP fields, rotated
@@ -143,8 +144,16 @@ removal; missing metadata; a metadata-heavy file; both policies; the preference 
 encode failure and undecodable-source fallbacks; and unchanged source bytes. Mutants that bypass
 stripping, let stripping requests fall back to raw bytes, or leave stored orientation/dimension tags
 stale are rejected. Both draft paths share `attachmentURL`, and the policy is read once in
-`openDraft`. Settings save, unsaved dismissal and relaunch persistence were exercised in the real
-Debug app. Messages itself was not opened.
+`openDraft`. Staff reported Settings save, unsaved dismissal and relaunch persistence in the real
+Debug app. Independent review did not repeat those UI checks or access event preferences.
+Messages itself was not opened.
+
+**Independent review:** At `627a881`, all 313 regression assertions pass, including on merged
+main. Eight isolated preference checks pass; the exact old helper fails the integer-zero and
+floating-zero cases. The GPS, raw-fallback and normalization mutants exit 1 with complete
+summaries of 19, 3 and 49 failures respectively; the correct suite passes again. The updated
+arm64 Debug build, universal arm64/x86_64 runner build, eight runner selector/reporting checks
+and synthetic N08 attachment case pass. No live printing or Messages action was performed.
 
 **Pending hardware gate:** [core-ui-runner](../scripts/core-ui-runner/main.swift) lists the manual
 checks. On Intel and Apple Silicon, inspect addressed and recipient-free drafts with synthetic
