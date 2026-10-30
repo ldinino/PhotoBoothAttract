@@ -95,7 +95,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         assistantWindow.contentView = NSHostingView(rootView: assistantView)
         assistantWindow.minSize = NSSize(width: 480, height: 400)
         assistantWindow.contentMinSize = NSSize(width: 480, height: 400)
-        assistantWindow.center()
         assistantWindow.setFrameAutosaveName("AssistantWindow")
         assistantWindow.delegate = self
         assistantWindow.tabbingMode = .disallowed
@@ -103,6 +102,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // 2. Guest View (Secondary Screen) — created/updated by refreshDisplayLayout()
         refreshDisplayLayout()
+    }
+
+    /// Centers a window of `size` in `visible`, shrinking it to fit; works for nonzero and negative origins.
+    static func centeredFrame(size: NSSize, in visible: NSRect) -> NSRect {
+        let w = min(size.width, visible.width), h = min(size.height, visible.height)
+        return NSRect(x: visible.midX - w / 2, y: visible.midY - h / 2, width: w, height: h)
+    }
+
+    private func placeAssistantOnPrimary(_ screens: [NSScreen]) {
+        guard let primary = screens.first else { return }
+        let frame = Self.centeredFrame(size: assistantWindow.frame.size, in: primary.visibleFrame)
+        assistantWindow.setFrame(frame, display: true)
     }
 
     /// Updates guest window based on current screens. Call on main thread. Re-centers assistant on main screen.
@@ -115,7 +126,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let screens = NSScreen.screens
         ErrorLog.shared.log("Displays refreshed: \(screens.count) screen(s) detected.")
 
-        assistantWindow.center()
+        placeAssistantOnPrimary(screens)
 
         if screens.count > 1 {
             let secondaryScreen = screens[1]
