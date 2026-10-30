@@ -1,29 +1,25 @@
 # Roadmap
 
-## Next: Device Acceptance
+## Next: SDK Reassessment
 
-The CORE fixes, native UI runner, notarization workflow and both Messages features are
-implemented. Their remaining device checks are the current blocker.
+[Version 1.1.1 is released](RELEASE_NOTES.md). The maintainer approved starting SDK reassessment
+with the [remaining device checks deferred](ENGINEERING_NOTES.md#release-111-and-sequencing-decision),
+not marked passed.
 
-1. Run the existing [native CORE UI runner](ENGINEERING_NOTES.md#native-core-ui-runner)
-   on the older Intel Mac with the TV and on Apple Silicon. Repeat with one display.
-2. Complete the device checks for CORE-003, CORE-005, CORE-007, CORE-008, CORE-009 and
-   CAM-001 in [BUGS.md](BUGS.md), including Cooperative-mode Imaging Edge Desktop coexistence.
-3. Qualify [Messages draft text](IMPLEMENTATION_SPEC.md#messages-draft-text) and
-   [attachment metadata](IMPLEMENTATION_SPEC.md#messages-attachment-metadata) in real addressed
-   and recipient-free drafts on both architectures. Authorize printing and delivery checks separately.
-4. Verify [notarized distribution](IMPLEMENTATION_SPEC.md#notarized-distribution) from a
-   quarantined download on Intel and Apple Silicon.
+1. Obtain matching Sony SDK headers and sample sources locally; the configured SDK tree
+   currently contains runtime libraries only. See the [source audit](ENGINEERING_NOTES.md#sdk-reassessment).
+2. Confirm SDK version, supported cameras, Intel/Apple Silicon compatibility and the documented
+   initialization, session and download APIs. Library loading and USB discovery are not transfer proof.
+3. Use the audit and relevant camera evidence to define the SDK punchlist, choose repair versus
+   replacement of the unfinished native path, and select the smallest testable implementation.
 
-Record sanitized PASS/FAIL/SKIP results and equipment blockers in
-[ENGINEERING_NOTES.md](ENGINEERING_NOTES.md). Close only checks with actual evidence;
-the [CORE acceptance gate](IMPLEMENTATION_SPEC.md#core-acceptance-gate) remains open.
+## Coming: Native USB Transfer
 
-## Coming: SDK Reassessment
+Define implementation from the SDK punchlist. Keep physical-shutter downloads aimed at the
+selected folder and reuse the existing hot-folder ingestion pipeline. Cooperative remains the
+production default. Remote shutter, live preview, new dependencies and SDK distribution changes
+need a separate decision.
 
-After CORE and both Messages features pass acceptance, audit the current camera code and
-locally installed Sony SDK with device evidence. Create the SDK punchlist, decide repair
-versus rewrite, then define the smallest implementation task. Preserve the hot-folder workflow.
-
-See the [SDK entry gate](IMPLEMENTATION_SPEC.md#sdk-entry-gate) for boundaries;
-[usb_cam_sonySDK.md](usb_cam_sonySDK.md) is investigation history, not acceptance evidence.
+Keep deferred CORE, camera and Messages checks tracked in [BUGS.md](BUGS.md) and
+[ENGINEERING_NOTES.md](ENGINEERING_NOTES.md). The [SDK entry gate](IMPLEMENTATION_SPEC.md#sdk-entry-gate)
+records the sequencing exception; [usb_cam_sonySDK.md](usb_cam_sonySDK.md) remains historical investigation.

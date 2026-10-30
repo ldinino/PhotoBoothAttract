@@ -467,7 +467,7 @@ printing or sending. Record hardware gaps as unverified, not passing results.
 ## Native CORE UI Runner
 
 **Status: runner implementation complete; native Intel target runs pass with and without the TV.**
-The Apple Silicon N11 placement failure is fixed on this branch (see below); its single-display pass
+The Apple Silicon N11 placement failure is fixed in PR #18 (`f10ac57`); its single-display pass
 is outstanding. The overall device acceptance gate remains open.
 
 **Build (development Mac only):** `bash scripts/build-core-ui-runner.sh` writes `dist/CoreUIRunner/`
@@ -622,3 +622,56 @@ drafts with synthetic photos under both GPS settings and compare sanitized expor
 [runner's manual checks](../scripts/core-ui-runner/main.swift) describe this separate pass.
 Recipient copies need separately authorized delivery evidence; export checks alone do not prove
 Messages or carrier retention. Print/save metadata behavior was not reviewed and is out of scope.
+
+## Release 1.1.1 and Sequencing Decision
+
+**Maintainer decision (2026-10-30):** Publish the current app, then begin SDK work. Remaining
+device checks are accepted as deferred for this release and SDK reassessment, not reported as
+passes. Existing CORE, CAM-001 and Messages acceptance requirements remain available; their
+unfinished checks are not silently closed.
+
+**Published:** [PhotoBooth Assistant v1.1.1](https://github.com/ldinino/PhotoBoothAttract/releases/tag/v1.1.1),
+build 18, source/tag commit `2cf538288ecc7beea0c2b40d30de6b344dd73c61`.
+Version 1.1.1 is newer than both the last public version 1.0.16 and the 1.1 test builds under
+the production updater's version comparator. The old updater's asset selection and replacement
+logic are unchanged; only its displayed product name differs.
+
+**Release verification:** The actual release workflow built arm64 and x86_64, signed the app
+and required nested code with Developer ID, received Apple notarization acceptance, stapled
+and validated the ticket, and passed Gatekeeper assessment as Notarized Developer ID. The
+final ZIP was extracted and compared with the built app. All five required SDK libraries and
+the executable have both slices, with minimum OS requirements no higher than the app's 15.7.
+Extracted metadata reports version 1.1.1 (18), the existing bundle identifier and the new
+public app name. Extracted signatures, staple and Gatekeeper assessment pass.
+
+**Published artifact:** `PhotoBoothAssistant-v1.1.1.zip`, 12,260,870 bytes.
+SHA-256: `137fca2d842ae804cb87539226b589fe67679aec9b5dec47cbefb7d730c65e31`.
+GitHub's latest-release API selects v1.1.1 and the intended single ZIP asset. Its reported digest
+and a fresh GitHub download match the verified local package. No app installation or updater
+replacement was performed as a release check.
+
+**Deferred evidence:** Single-display placement, the fixed-build Intel placement recheck,
+camera/IED restart and reconnect, unavailable-printer handling, remaining Messages route/text/GPS
+and recipient-retention checks, and quarantined-download first launch on Intel and Apple Silicon.
+Local Gatekeeper assessment and matching download bytes are not target-device launch evidence.
+
+## SDK Reassessment
+
+**Source audit (2026-10-30):** In [AppDelegate.swift](../PhotoBoothAttract/AppDelegate.swift),
+`SonyCameraManager.liveBackend` constructs `SonySDKLoader` and an `ICDeviceBrowser`.
+The loader uses `dlopen`; the browser supplies the connected badge through name/USB filtering.
+This path does not call SDK initialization, create an SDK camera session, set a download
+destination or receive SDK download callbacks. It does not implement native image transfer.
+
+**Local dependency evidence:** The configured SDK tree contains the five runtime libraries,
+already checked for Intel and Apple Silicon slices in the release. Its SimpleCli directory
+contains only external runtime files, not the headers and sample sources claimed by the
+historical investigation. Read-only symbol inspection found version, enumeration and
+save-location exports in the core library. Exports alone establish neither the required ABI
+declarations nor the SDK version, camera support, session lifecycle or working transfer.
+No SDK library was loaded and no camera operation was attempted during this audit.
+
+**Next prerequisite:** Obtain matching vendor headers and samples locally, confirm the SDK
+version and camera/architecture support, then define the minimal session/download integration
+and its hardware checks. Do not infer function signatures from exported symbol names. Keep
+vendor files out of Git, Cooperative as the default and the hot-folder pipeline unchanged.

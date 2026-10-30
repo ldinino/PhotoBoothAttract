@@ -25,8 +25,9 @@ isProject: false
 > Historical, unverified notes, not the current implementation plan. The milestone
 > completion metadata and architecture claims below do not establish working SDK
 > initialization, connection, capture or image transfer. Preserve them as investigation
-> history, not acceptance evidence. [ROADMAP.md](ROADMAP.md) puts core cleanup first;
-> a fresh SDK audit and SDK punchlist come only after core cleanup is accepted.
+> history, not acceptance evidence. The maintainer approved SDK reassessment after v1.1.1
+> with remaining device checks explicitly deferred. Use the [current source audit](ENGINEERING_NOTES.md#sdk-reassessment)
+> and [ROADMAP.md](ROADMAP.md), not the old completion labels, to choose the next task.
 
 ## Goals
 

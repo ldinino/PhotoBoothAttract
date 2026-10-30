@@ -215,7 +215,12 @@ CORE acceptance, including device qualification and notarized distribution, and 
 both high-priority Messages features are required before SDK implementation. Messages features
 do not close pending CORE items.
 
-After those gates, re-audit current code and the locally installed Sony SDK with relevant camera
+**Maintainer sequencing decision (2026-10-30):** The maintainer approved releasing v1.1.1 and
+starting SDK reassessment while the remaining device checks are deferred. This changes sequencing,
+not verification: the original acceptance requirements and open checks remain recorded. See the
+[release decision and evidence](ENGINEERING_NOTES.md#release-111-and-sequencing-decision).
+
+After those gates or the recorded sequencing decision, re-audit current code and the locally installed Sony SDK with relevant camera
 evidence. Only then create a separate SDK punchlist, choose repair versus rewrite and define
 scope and acceptance checks. [usb_cam_sonySDK.md](usb_cam_sonySDK.md) is historical investigation;
 library loading and USB discovery do not prove capture or file transfer.
