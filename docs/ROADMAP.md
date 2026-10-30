@@ -68,6 +68,39 @@ automatic sending, SDK distribution changes or new OS requirements without an ex
 SDK scope, acceptance checks and sequencing will be defined with its later punchlist,
 not inferred from old milestone completion labels.
 
+## Feature Backlog
+
+These requests do not change the CORE gate or SDK sequencing above.
+
+### Customizable Messages Draft Text
+
+**Status:** Requested; not implemented. Priority not scheduled.
+
+Allow the assistant to customize the message prefilled alongside a photo without changing
+code. Both addressed and recipient-free drafts must use the same configured text. Messages
+remains the editable system draft; the assistant still controls sending. Opening a draft is
+not proof of sending or delivery.
+
+**Current behavior:** [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift) uses
+the fixed body `Thank you for choosing SD Photography. https://www.sd-photo.com/` in both
+draft paths.
+
+**Proposed minimum:** One plain-text setting in
+[SettingsView.swift](../PhotoBoothAttract/SettingsView.swift), saved between launches and
+initially using the existing body. Keep configuration and recipient information off the
+guest display. Preserve photo attachments and leave original images untouched.
+
+**Decisions before implementation:** Confirm global versus per-event scope, storage
+(`UserDefaults` for a global setting versus a template store if scope expands), and whether
+blank text means photo-only or falls back to the default. Per-customer templates,
+placeholder substitution and an in-app preview/edit sheet are not assumed requirements.
+
+**Acceptance:** Verify persistence, the agreed default/blank behavior and identical text
+selection in both draft paths with focused automated checks. Separately verify that real
+Messages drafts contain the configured text and photo, with and without a recipient, and
+remain editable without automatic sending. Use synthetic photos and placeholder recipients;
+do not send messages or record guest data as routine validation.
+
 ## References
 
 - [BUGS.md](BUGS.md): glanceable core punchlist.
