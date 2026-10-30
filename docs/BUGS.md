@@ -1,8 +1,39 @@
-# Core Bug Punchlist
+# Bug Punchlist
 
-CORE-001, CORE-002, CORE-004 and CORE-006 are closed; five items remain open. Baseline reviewed on 2026-10-27 at `1a7089b`.
+CORE-001, CORE-002, CORE-004 and CORE-006 are closed; five core items remain open. Baseline reviewed on 2026-10-27 at `1a7089b`.
 See [ENGINEERING_NOTES.md](ENGINEERING_NOTES.md) for evidence and acceptance checks,
-and [ROADMAP.md](ROADMAP.md) for sequencing. SDK findings are deferred until core cleanup is accepted.
+and [ROADMAP.md](ROADMAP.md) for sequencing. SDK feature work remains deferred until core cleanup is accepted;
+CAM-001 is a production tethering isolation fix, not an SDK feature milestone.
+
+## Camera Workflow: High Priority
+
+- [ ] **CAM-001: Unconditional SDK startup can interfere with Imaging Edge Desktop.**
+
+**Reported:** During testing of the newly notarized app, the maintainer found that PBA's
+unfinished native camera path can take the camera away from Sony Imaging Edge Desktop (IED).
+There is no setting to keep PBA out of camera resources while IED supplies the hot folder.
+
+**Source verified:** [AppDelegate.swift](../PhotoBoothAttract/AppDelegate.swift) unconditionally
+starts `SonyCameraManager` at launch. `start()` attempts to load the SDK dylibs and starts
+`ICDeviceBrowser` even when SDK loading fails. `stop()` stops only the browser; loaded SDK
+handles remain held until loader destruction. [SettingsView.swift](../PhotoBoothAttract/SettingsView.swift)
+has no camera workflow preference. This confirms missing isolation, not which call claims
+the physical camera or that native capture/transfer works.
+
+**Required containment:** Add a persisted **Cooperative** / **Native** mode setting on the
+assistant side, with a small `?` help button explaining both. Cooperative is the safe default,
+including existing installations without a preference and invalid stored values: IED or another
+tethering app owns the camera; PBA only watches the selected folder and must not initialize/load
+the Sony SDK or create/start USB camera discovery. Native explicitly opts into the existing
+experimental camera path; it does not promise working capture or transfer. Keep hot-folder
+ingestion, printing and Messages drafts unchanged in both modes. Use restart-required mode
+changes for this first fix so a UI selection cannot falsely promise release of loaded resources.
+
+**Acceptance pending:** Automated mode/default/startup-isolation checks, settings/status UI
+checks, Debug build, and camera evidence on Intel and Apple Silicon. Verify IED transfer into
+the watched folder with Cooperative selected, through PBA launch/relaunch and camera reconnect.
+Verify Native opt-in and return to Cooperative across a full quit/relaunch. No local hardware
+reproduction or fix has been performed for this entry.
 
 ## High Priority
 
