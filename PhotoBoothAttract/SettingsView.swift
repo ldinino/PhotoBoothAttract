@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var printerName: String = PrintManager.shared.configuredPrinterName
     @State private var availablePrinters: [String] = []
     @State private var watermarkText: String = ""
+    @State private var messageText = ""
     @State private var saved = false
     @State private var cameraMode = CameraMode.resolve()
     @State private var savedCameraMode = CameraMode.resolve()
@@ -81,6 +82,14 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Section("Messages") {
+                    TextEditor(text: $messageText)
+                        .frame(height: 60)
+                    Text("Text added to each Messages draft with the photo. Leave blank to send the photo only.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
 
@@ -96,6 +105,7 @@ struct SettingsView: View {
                 Button("Save") {
                     PrintManager.shared.configuredPrinterName = printerName
                     UserDefaults.standard.set(watermarkText, forKey: GuestGridConfig.watermarkKey)
+                    UserDefaults.standard.set(messageText, forKey: MessageManager.messageTextKey)
                     UserDefaults.standard.set(cameraMode.rawValue, forKey: CameraMode.key)
                     savedCameraMode = cameraMode
                     saved = true
@@ -109,10 +119,11 @@ struct SettingsView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 480, height: 440)
+        .frame(width: 480, height: 540)
         .onAppear {
             availablePrinters = PrintManager.shared.availablePrinters()
             watermarkText = UserDefaults.standard.string(forKey: GuestGridConfig.watermarkKey) ?? ""
+            messageText = MessageManager.draftText() ?? ""
         }
     }
 }

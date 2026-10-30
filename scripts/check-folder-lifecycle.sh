@@ -12,6 +12,7 @@
 # LIFECYCLE_MUTANT=clearaccess|clearempty: access errors count as gone | empty clear wipes the list.
 # LIFECYCLE_MUTANT=attachment: CORE-003 attachments share the temp directory (deterministic paths).
 # LIFECYCLE_MUTANT=orientation: CORE-008 shares skip orientation normalization.
+# LIFECYCLE_MUTANT=blankdefault: blank Messages text restores the default.
 # LIFECYCLE_MUTANT=clearsuccess|clearhide: CORE-005 clear always reports success | failed deletions lose their rows.
 set -euo pipefail
 
@@ -45,6 +46,7 @@ export ATTACH_ROOT="$WORK/attach/tmp"; mkdir -p "$ATTACH_ROOT"
 sed -E 's/private (func|var|let)/\1/; s|FileManager.default.temporaryDirectory|URL(fileURLWithPath: "'"$WORK"'/attach/tmp", isDirectory: true)|' "$SRC/MessageManager.swift" > "$WORK/MessageManager.swift"
 case "${LIFECYCLE_MUTANT:-}" in
     attachment) sed -i '' '/PhotoBoothAttract-messages/d; /UUID().uuidString, isDirectory: true)/d' "$WORK/MessageManager.swift" ;;
+    blankdefault) sed -i '' 's/.isEmpty ? nil : text/.isEmpty ? defaultMessageText : text/' "$WORK/MessageManager.swift" ;;
     orientation) sed -i '' 's/kCGImageSourceCreateThumbnailWithTransform: true/kCGImageSourceCreateThumbnailWithTransform: false/' "$WORK/MessageManager.swift" ;;
 esac
 case "${LIFECYCLE_MUTANT:-}" in
@@ -763,6 +765,33 @@ for longest in [2400, 3000, 4000] {
     }
 }
 try? atfm.removeItem(at: oriDir)
+
+// Messages draft text: isolated preferences, production helpers, no sharing service
+let mtSuite = "folder-lifecycle-checks.messages"
+let mtDefaults = UserDefaults(suiteName: mtSuite)!
+mtDefaults.removePersistentDomain(forName: mtSuite)
+let mtKey = MessageManager.messageTextKey
+let mtDefault = "Thank you for choosing SD Photography. https://www.sd-photo.com/"
+check("message text: missing preference uses the default", MessageManager.draftText(defaults: mtDefaults) == mtDefault)
+for bad in [42, true, ["a"], Data([1])] as [Any] {
+    mtDefaults.set(bad, forKey: mtKey)
+    check("message text: non-string \(type(of: bad)) uses the default", MessageManager.draftText(defaults: mtDefaults) == mtDefault)
+}
+let mtMulti = "  Hi \u{1F600} caf\u{E9}\nhttps://example.com/x?y=1\n\nBye  "
+mtDefaults.set(mtMulti, forKey: mtKey)
+check("message text: multiline, URL and Unicode are preserved exactly", MessageManager.draftText(defaults: mtDefaults) == mtMulti)
+let mtReread = UserDefaults(suiteName: mtSuite)!
+check("message text: persists to a fresh defaults handle", MessageManager.draftText(defaults: mtReread) == mtMulti)
+for blank in ["", "   ", "\n\t \n"] {
+    mtDefaults.set(blank, forKey: mtKey)
+    check("message text: blank \(blank.debugDescription) means photo only, not the default", MessageManager.draftText(defaults: mtDefaults) == nil)
+}
+let mtURL = URL(fileURLWithPath: "/tmp/p_send.jpg")
+let withText = MessageManager.draftItems(text: "Hello", attachment: mtURL)
+check("message items: text first, then the attachment", withText.count == 2 && withText[0] as? String == "Hello" && withText[1] as? URL == mtURL)
+let photoOnly = MessageManager.draftItems(text: nil, attachment: mtURL)
+check("message items: photo only has just the attachment", photoOnly.count == 1 && photoOnly[0] as? URL == mtURL)
+mtDefaults.removePersistentDomain(forName: mtSuite)
 
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)

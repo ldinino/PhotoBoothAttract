@@ -20,7 +20,18 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
     private static let maxQualityIterations = 10
     /// Fallback quality if target-size search fails (e.g. encode errors).
     private static let fallbackQuality: CGFloat = 0.85
-    private static let messageBody = "Thank you for choosing SD Photography. https://www.sd-photo.com/"
+    static let messageTextKey = "messagesDraftText"
+    static let defaultMessageText = "Thank you for choosing SD Photography. https://www.sd-photo.com/"
+
+    /// Saved text, the default when unset or not a string; nil (photo only) when blank.
+    static func draftText(defaults: UserDefaults = .standard) -> String? {
+        let text = defaults.object(forKey: messageTextKey) as? String ?? defaultMessageText
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+    }
+
+    static func draftItems(text: String?, attachment: URL) -> [Any] {
+        (text.map { [$0] } ?? []) + [attachment]
+    }
 
     func prepareDraft(imageData: Data, name: String, phoneNumber: String) {
         let sanitized = phoneNumber.filter { $0.isNumber || $0 == "+" }
@@ -28,21 +39,14 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
             ErrorLog.shared.log("MessageManager: Invalid phone number")
             return
         }
-
-        guard let sendURL = attachmentURL(for: imageData, name: name) else { return }
-
-        guard let service = NSSharingService(named: .composeMessage) else {
-            ErrorLog.shared.log("MessageManager: composeMessage service unavailable")
-            removeRequestDirectory(of: sendURL)
-            return
-        }
-
-        service.recipients = [sanitized]
-        service.delegate = self
-        service.perform(withItems: [Self.messageBody, sendURL])
+        openDraft(imageData: imageData, name: name, recipient: sanitized)
     }
 
     func prepareDraftWithoutRecipient(imageData: Data, name: String) {
+        openDraft(imageData: imageData, name: name, recipient: nil)
+    }
+
+    private func openDraft(imageData: Data, name: String, recipient: String?) {
         guard let sendURL = attachmentURL(for: imageData, name: name) else { return }
 
         guard let service = NSSharingService(named: .composeMessage) else {
@@ -51,8 +55,9 @@ class MessageManager: NSObject, NSSharingServiceDelegate {
             return
         }
 
+        if let recipient { service.recipients = [recipient] }
         service.delegate = self
-        service.perform(withItems: [Self.messageBody, sendURL])
+        service.perform(withItems: Self.draftItems(text: Self.draftText(), attachment: sendURL))
     }
 
     /// A file in its own per-request directory. Handed-off files are never deleted: when

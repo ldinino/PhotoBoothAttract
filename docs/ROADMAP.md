@@ -59,26 +59,21 @@ The CORE acceptance gate above remains unchanged; these features do not close pe
 
 ### Customizable Messages Draft Text
 
-**Status:** Requested; not implemented. High priority; required before SDK implementation.
+**Status:** Implemented on `feat/customizable-messages-text` (PR pending audit). Focused automated checks and a Debug build pass; real Messages drafts on Intel and Apple Silicon, and Settings window inspection, are not yet tested. High priority; required before SDK implementation.
 
 Allow the assistant to customize the message prefilled alongside a photo without changing
 code. Both addressed and recipient-free drafts must use the same configured text. Messages
 remains the editable system draft; the assistant still controls sending. Opening a draft is
 not proof of sending or delivery.
 
-**Current behavior:** [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift) uses
-the fixed body `Thank you for choosing SD Photography. https://www.sd-photo.com/` in both
-draft paths.
-
-**Proposed minimum:** One plain-text setting in
-[SettingsView.swift](../PhotoBoothAttract/SettingsView.swift), saved between launches and
-initially using the existing body. Keep configuration and recipient information off the
-guest display. Preserve photo attachments and leave original images untouched.
-
-**Decisions before implementation:** Confirm global versus per-event scope, storage
-(`UserDefaults` for a global setting versus a template store if scope expands), and whether
-blank text means photo-only or falls back to the default. Per-customer templates,
-placeholder substitution and an in-app preview/edit sheet are not assumed requirements.
+**Behavior:** A global multiline plain-text setting in
+[SettingsView.swift](../PhotoBoothAttract/SettingsView.swift), stored in `UserDefaults`,
+is loaded when Settings opens and persisted only by Save. [MessageManager.swift](../PhotoBoothAttract/MessageManager.swift)
+reads it for every draft, so both paths share one text/item builder and changes need no
+restart. A missing or non-string value uses `Thank you for choosing SD Photography.
+https://www.sd-photo.com/`; blank or whitespace-only text means photo only; other text is
+kept exactly. Already-open drafts are unchanged. Templates, placeholders, per-customer data
+and a preview sheet are out of scope.
 
 **Acceptance:** Verify persistence, the agreed default/blank behavior and identical text
 selection in both draft paths with focused automated checks. Separately verify that real
