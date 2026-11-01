@@ -697,13 +697,35 @@ are not a completed transfer test. No capture, download, deletion or exposure-se
 was requested. Raw serials, owner fields, storage labels and property values were suppressed;
 temporary host state was removed, and the command process exited.
 
-**Scope:** This verifies a real A6600 protocol initialization and summary exchange through
-libgphoto2, not native transfer into PhotoBooth Assistant. RX100 hardware behavior, Intel
-behavior, physical-shutter events, file-transfer readiness and reconnect recovery are unverified.
-gphoto2 is installed as a standalone diagnostic only; no app dependency, bundle, signing or
-backend changed. Any app integration still needs a dependency/licensing and packaging decision.
+**Physical-shutter transfer (2026-11-01):** With maintainer authorization, gphoto2 waited for
+one manually taken test photo using `--wait-event-and-download=1f --keep`, with an exact
+A6600 model/USB-port selection and a two-minute process deadline. The receiver saved one
+JPEG into an owned test folder and exited 0 without exceeding the deadline. No automatic
+shutter, configuration-write or deletion option was used. A prior empty window expired while
+the maintainer was away and took no shot; it was not evidence of a transfer failure.
 
-**Next check:** With separate authorization and a synthetic scene, validate physical-shutter
-event handling and one image transfer into a disposable destination. Preserve card originals,
-avoid automatic shutter or deletion commands, and do not assume event waiting is read-only:
-the driver's event path may fetch image data. Keep Cooperative hot-folder mode as the production default.
+**Image and ingestion checks:** The received JPEG is 10,191,527 bytes, 6000x4000, orientation 1,
+and identifies SONY / ILCE-6600. ImageIO reports a complete source and decodes the full image;
+its downsampled display thumbnail is 800x533. A temporary harness compiled the unchanged
+production PhotoManager/PhotoModel with an isolated helper preferences identity and a logging
+stub. Copying the actual transferred fixture into its watched folder generated a real FSEvents
+arrival: exactly one photo, the expected byte digest, a display thumbnail no larger than 800 px
+and successful source verification returning identical bytes. No duplicate row appeared, and
+the original downloaded file remained byte-for-byte unchanged. No print or Messages action
+was invoked. Scratch code, executable and copied validation fixtures were removed; no camera
+photo, original filename or personal metadata is committed.
+
+**Storage and camera control:** Before arming, read-only checks reported Extra Fine JPEG,
+capture target `card+sdram` and zero queued RAM images. Those settings were not changed.
+This proves physical-shutter-to-host copying in that setup, not cardless capture or SD bypass.
+Camera focus, color and exposure remain camera-owned. The Sony session's application-control
+priority initialization was already authorized.
+
+**Scope and next checks:** gphoto2 is a standalone diagnostic only; no app dependency, bundle,
+signing or backend changed. This is one successful A6600 transfer plus production ingestion
+logic exercised in a helper, not a full integrated app workflow. RX100, Intel, repeated/burst
+arrivals, reconnect recovery, cardless operation and live preview remain unverified. Any app
+integration still needs a dependency/licensing and universal-packaging decision. Do not assume
+event waiting is read-only: the driver's event path may fetch image data. Keep Cooperative
+hot-folder mode as the production default; see the
+[native copy requirements](IMPLEMENTATION_SPEC.md#native-camera-copy-workflow).

@@ -228,6 +228,22 @@ library loading and USB discovery do not prove capture or file transfer.
 Keep the hot-folder product working. Direct capture, automatic sending, SDK distribution changes
 and new OS requirements require an explicit decision; old milestone labels do not define new scope.
 
+### Native Camera Copy Workflow
+
+**Maintainer requirements (2026-11-01):** The camera controls focus, exposure, color, white balance
+and image processing. A photographer presses the physical shutter; the host receives a copy of
+the resulting image. Do not add remote shutter or camera-setting automation to this workflow.
+
+Aim native downloads at the selected folder and reuse the existing ingestion/readiness pipeline.
+Keep camera/card originals untouched and preserve Cooperative hot-folder fallback. Cardless or
+RAM-only operation may be useful, but must be verified per camera; do not infer SD bypass from
+a successful transfer in `card+sdram` mode. Live preview is a nice-to-have, not a release or
+transfer-acceptance requirement, and belongs in separate follow-up scope.
+
+The current libgphoto2 diagnostic validates one A6600 physical-shutter copy on Apple Silicon.
+It does not yet establish RX100/Intel compatibility, reconnect reliability, live preview or an
+integrated app backend. See the [hardware evidence](ENGINEERING_NOTES.md#older-sony-camera-backend-probe).
+
 ---
 
 ## Prompt Directives (Reference)
