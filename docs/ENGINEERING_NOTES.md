@@ -671,7 +671,39 @@ save-location exports in the core library. Exports alone establish neither the r
 declarations nor the SDK version, camera support, session lifecycle or working transfer.
 No SDK library was loaded and no camera operation was attempted during this audit.
 
-**Next prerequisite:** Obtain matching vendor headers and samples locally, confirm the SDK
-version and camera/architecture support, then define the minimal session/download integration
-and its hardware checks. Do not infer function signatures from exported symbol names. Keep
-vendor files out of Git, Cooperative as the default and the hot-folder pipeline unchanged.
+**Developer package recovered (2026-10-30):** The maintainer's local Sony Camera Remote SDK
+2.02.00 package contains SimpleCli/RemoteCli headers and samples plus the API reference. All
+five archived runtime libraries match the configured project copies byte-for-byte. The actual
+headers provide initialization, enumeration, connection, release and download callback APIs.
+The vendor compatibility table and USB model enum do not include ILCE-6600 or DSC-RX100M7;
+ILCE-6700 and the relevant A7 IV/A7R IV variants are listed. Do not infer broader family support.
+
+## Older Sony Camera Backend Probe
+
+**Native SDK result (2026-10-30):** The opt-in SDK 2.02 probe initializes and releases correctly,
+but the attached A6600 reports zero SDK camera objects, before model/transport filtering.
+No SDK Connect call was made. macOS's passive USB registry identifies ILCE-6600 with the
+Sony vendor/product IDs; this establishes USB visibility, not a usable SDK session. A bounded
+ImageCaptureCore probe with an explicit local-camera mask also completes enumeration with
+zero devices in this PC Remote setup, so it makes no open-session request.
+
+**Open-source hardware result (2026-11-01):** On Mac13,2, native arm64, macOS 26.7.1 (25G241),
+standalone gphoto2 2.5.32 with libgphoto2 2.5.34 auto-detects Sony Alpha-A6600 (PC Control).
+After maintainer approval for its Sony application-control-priority initialization, one exact
+model/USB-port summary request completed within a 35-second deadline and exited 0. The
+camera supplied Sony Corporation, model ILCE-6600 and device version 1.0. Its capability
+summary reports file download, no file deletion and no file upload. These capability reports
+are not a completed transfer test. No capture, download, deletion or exposure-setting command
+was requested. Raw serials, owner fields, storage labels and property values were suppressed;
+temporary host state was removed, and the command process exited.
+
+**Scope:** This verifies a real A6600 protocol initialization and summary exchange through
+libgphoto2, not native transfer into PhotoBooth Assistant. RX100 hardware behavior, Intel
+behavior, physical-shutter events, file-transfer readiness and reconnect recovery are unverified.
+gphoto2 is installed as a standalone diagnostic only; no app dependency, bundle, signing or
+backend changed. Any app integration still needs a dependency/licensing and packaging decision.
+
+**Next check:** With separate authorization and a synthetic scene, validate physical-shutter
+event handling and one image transfer into a disposable destination. Preserve card originals,
+avoid automatic shutter or deletion commands, and do not assume event waiting is read-only:
+the driver's event path may fetch image data. Keep Cooperative hot-folder mode as the production default.
